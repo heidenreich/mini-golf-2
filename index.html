@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#5fb3ec">
+<meta name="description" content="3D mini golf on floating sky islands. Plays in your phone's browser.">
+<title>Mini Golf 2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="game" aria-label="Mini golf course"></canvas>
+
+<div id="hud" hidden>
+  <div class="row">
+    <button id="menu-btn" class="chip icon" aria-label="Menu">&#9776;</button>
+    <span class="chip">Hole <b id="hud-hole">1</b>/<span id="hud-holes">9</span></span>
+    <span class="chip">Par <b id="hud-par">2</b></span>
+    <span class="chip">Strokes <b id="hud-strokes">0</b></span>
+    <span class="chip" id="hud-total-chip">Total <b id="hud-total">E</b></span>
+  </div>
+  <div id="hud-name"></div>
+</div>
+
+<div id="cam-controls" hidden>
+  <button id="cam-left" class="chip icon" aria-label="Turn camera left">&#10226;</button>
+  <button id="cam-flag" class="chip icon" aria-label="Face the flag">&#9873;</button>
+  <button id="cam-view" class="chip icon" aria-label="Overview of the hole" aria-pressed="false">&#9638;</button>
+  <button id="cam-right" class="chip icon" aria-label="Turn camera right">&#10227;</button>
+</div>
+
+<div id="power" hidden><div id="power-fill"></div><span id="power-text">0%</span></div>
+<div id="hint" hidden>
+  <span class="hint-mouse">Drag back and release to putt &middot; arrows + Space &middot; right-drag or Q/E to look round &middot; V overview &middot; R restart</span>
+  <span class="hint-touch">Drag back and release to putt &middot; two fingers to look round</span>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="overlay"><div class="card" id="card" role="dialog" aria-modal="true" aria-label="Game menu"></div></div>
+<noscript><p class="noscript">Mini Golf 2 needs JavaScript to run.</p></noscript>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
