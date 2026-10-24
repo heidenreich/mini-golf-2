@@ -14,7 +14,7 @@ const GRAVITY = 9.8;
 const ROLLING = 5 / 7;                // a rolling ball feels 5/7 of the pull down a slope
 const RESTITUTION = 0.7;
 const SOFT_IMPACT = 0.25;             // slower hits than this don't bounce
-const REST_SPEED = 0.05;
+export const REST_SPEED = 0.05;     // slower than this counts as stopped
 const SPINNER_HALF = 0.07;
 const MOVER_HALF = 0.03;
 
@@ -86,8 +86,10 @@ export class Sim {
     return Math.hypot(this.ball.vx, this.ball.vz);
   }
 
+  // A ball held against a rail by a slope keeps creeping at a few mm/s;
+  // that counts as stopped, so it can be putted.
   get moving() {
-    return this.ball.vx !== 0 || this.ball.vz !== 0;
+    return this.speed >= REST_SPEED;
   }
 
   place(x, z) {
@@ -194,13 +196,11 @@ export class Sim {
     for (const m of this.hole.movers || []) {
       const st = moverState(m, t);
       const hw = m.w / 2 - MOVER_HALF, hd = m.d / 2 - MOVER_HALF;
-      const corners = [
-        [st.x - hw, st.z - hd], [st.x + hw, st.z - hd],
-        [st.x + hw, st.z + hd], [st.x - hw, st.z + hd],
-      ];
-      for (let i = 0; i < 4; i++) {
-        const [x1, z1] = corners[i], [x2, z2] = corners[(i + 1) % 4];
-        this.hitSegment({ x1, z1, x2, z2 }, MOVER_HALF, st.vx, st.vz, null, onHit);
+      const x0 = st.x - hw, x1 = st.x + hw, z0 = st.z - hd, z1 = st.z + hd;
+      const seg = this.moverSeg || (this.moverSeg = {});
+      for (const [ax, az, bx, bz] of [[x0, z0, x1, z0], [x1, z0, x1, z1], [x1, z1, x0, z1], [x0, z1, x0, z0]]) {
+        seg.x1 = ax; seg.z1 = az; seg.x2 = bx; seg.z2 = bz;
+        this.hitSegment(seg, MOVER_HALF, st.vx, st.vz, null, onHit);
       }
     }
   }

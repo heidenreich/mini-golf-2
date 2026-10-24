@@ -168,9 +168,9 @@ export class World {
       overview: false,
     };
 
-    const hemi = new THREE.HemisphereLight('#e4f3ff', '#5f8a3e', 1.35);
+    const hemi = new THREE.HemisphereLight('#e4f3ff', '#5f8a3e', 0.95);
     this.scene.add(hemi);
-    this.sun = new THREE.DirectionalLight('#fff6e0', 2.1);
+    this.sun = new THREE.DirectionalLight('#fff6e0', 2.7);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(lowPower ? 1024 : 2048, lowPower ? 1024 : 2048);
     this.sun.shadow.bias = -0.0005;
@@ -231,6 +231,7 @@ export class World {
       isle.position.set(Math.cos(a) * r, -14 + rand() * 8, Math.sin(a) * r);
       isle.scale.setScalar(1 + rand() * 1.5);
       isle.userData.bob = rand() * Math.PI * 2;
+      isle.userData.baseY = isle.position.y;
       this.sky.add(isle);
     }
     this.scene.add(this.sky);
@@ -274,7 +275,10 @@ export class World {
         if (o.material && o.material.dispose) o.material.dispose();
       });
     }
-    for (const p of this.particles) this.scene.remove(p.mesh);
+    for (const p of this.particles) {
+      this.scene.remove(p.mesh);
+      p.mesh.material.dispose();
+    }
     this.particles = [];
 
     this.hole = hole;
@@ -297,7 +301,7 @@ export class World {
     cam.left = -size; cam.right = size; cam.top = size; cam.bottom = -size;
     cam.near = 1; cam.far = 60;
     cam.updateProjectionMatrix();
-    this.sun.position.set(b.cx + 12, 13, b.cz + 4);
+    this.sun.position.set(b.cx + 7, 11, b.z0 - 9);
     this.sun.target.position.set(b.cx, 0, b.cz);
     this.sky.position.set(b.cx, 0, b.cz);
 
@@ -320,62 +324,97 @@ export class World {
     const inPoly = new Uint8Array(nx * nz);
     const rand = rng(99);
     const col = new THREE.Color();
+    const cupGreen = new THREE.Color('#86d35b');
+    const zoneColor = { sand: COLORS.sand, ice: COLORS.ice, water: COLORS.pondBed };
+
+    for (let j = 0; j < nz; j++) {
+      for (let i = 0; i < nx; i++) {
+        inPoly[j * nx + i] = insidePolygon(hole.shape, x0 + i * GRID, z0 + j * GRID) ? 1 : 0;
+      }
+    }
+    // Only vertices next to the outline need snapping onto it.
+    const nearEdge = (i, j) => {
+      const v = inPoly[j * nx + i];
+      for (let dj = -1; dj <= 1; dj++) {
+        for (let di = -1; di <= 1; di++) {
+          const a = i + di, b = j + dj;
+          if (a >= 0 && b >= 0 && a < nx && b < nz && inPoly[b * nx + a] !== v) return true;
+        }
+      }
+      return false;
+    };
 
     for (let j = 0; j < nz; j++) {
       for (let i = 0; i < nx; i++) {
         const k = j * nx + i;
         const x = x0 + i * GRID, z = z0 + j * GRID;
-        const inside = insidePolygon(hole.shape, x, z);
-        inPoly[k] = inside ? 1 : 0;
+        const inside = inPoly[k] === 1;
+        const edge = nearEdge(i, j);
 
-        // Fairway vertex
-        let fx = x, fz = z;
-        if (!inside) [fx, fz] = nearestOnPolygon(hole.shape, x, z).point;
-        const dc = Math.hypot(fx - cx, fz - cz);
-        if (dc < CUP_R) {
-          const s = dc > 1e-6 ? CUP_R / dc : 0;
-          fx = dc > 1e-6 ? cx + (fx - cx) * s : cx + CUP_R;
-          fz = dc > 1e-6 ? cz + (fz - cz) * s : cz;
-        }
-        fairPos[k * 3] = fx;
-        fairPos[k * 3 + 1] = terrain.renderHeight(fx, fz);
-        fairPos[k * 3 + 2] = fz;
+        // Fairway vertex (only those inside or touching the outline are used).
+        if (inside || edge) {
+          let fx = x, fz = z;
+          if (!inside) [fx, fz] = nearestOnPolygon(hole.shape, x, z).point;
+          const dc = Math.hypot(fx - cx, fz - cz);
+          if (dc < CUP_R) {
+            fx = dc > 1e-6 ? cx + ((fx - cx) * CUP_R) / dc : cx + CUP_R;
+            fz = dc > 1e-6 ? cz + ((fz - cz) * CUP_R) / dc : cz;
+          }
+          const h = terrain.renderHeight(fx, fz);
+          fairPos[k * 3] = fx;
+          fairPos[k * 3 + 1] = h;
+          fairPos[k * 3 + 2] = fz;
 
-        // Mown stripes, then sand, ice and pond bed painted on top.
-        col.copy(Math.floor((fz + 100) / 0.8) % 2 ? COLORS.grassA : COLORS.grassB);
-        for (const zone of zones) {
-          const target = zone.type === 'sand' ? COLORS.sand : zone.type === 'ice' ? COLORS.ice : COLORS.pondBed;
-          const t = zoneEdge(zone, fx, fz);
-          if (t > 0) col.lerp(target, t);
+          // Mown stripes, then sand, ice and pond bed painted on top.
+          col.copy(Math.floor((fz + 100) / 0.8) % 2 ? COLORS.grassA : COLORS.grassB);
+          for (const zone of zones) {
+            const t = zoneEdge(zone, fx, fz);
+            if (t > 0) col.lerp(zoneColor[zone.type], t);
+          }
+          if (dc < 0.75) col.lerp(cupGreen, 0.35 * (1 - dc / 0.75));
+          // Make the ground's shape readable: higher ground lighter, steeper
+          // ground darker, and contour lines every 10 cm of height.
+          const [gx, gz] = terrain.grad(fx, fz);
+          const slope = Math.hypot(gx, gz);
+          let shade = 1 + Math.max(-0.25, Math.min(0.25, h * 0.22)) - Math.min(0.3, slope * 0.55);
+          if (slope > 0.03) {
+            const f = (((h + 10) / 0.1) % 1 + 1) % 1;
+            if (f < 0.35) shade -= 0.12 * Math.min(1, slope / 0.08);
+          }
+          col.multiplyScalar(shade);
+          fairCol[k * 3] = col.r;
+          fairCol[k * 3 + 1] = col.g;
+          fairCol[k * 3 + 2] = col.b;
         }
-        if (dc < 0.75) col.lerp(new THREE.Color('#86d35b'), 0.35 * (1 - dc / 0.75));
-        // Higher ground a shade lighter, lower ground darker, so slopes read.
-        col.multiplyScalar(1 + Math.max(-0.25, Math.min(0.25, terrain.height(fx, fz) * 0.22)));
-        fairCol.set([col.r, col.g, col.b], k * 3);
 
         // Rough vertex
-        let rx = x, rz = z;
-        if (inside) [rx, rz] = nearestOnPolygon(hole.shape, x, z).point;
-        else if (!island.inside(x, z)) [rx, rz] = island.snap(x, z);
-        roughPos[k * 3] = rx;
-        roughPos[k * 3 + 1] = terrain.height(rx, rz) - ROUGH_DROP + (inside ? 0 : (rand() - 0.5) * 0.025);
-        roughPos[k * 3 + 2] = rz;
-        col.copy(COLORS.rough).lerp(COLORS.roughDark, rand() * 0.6);
-        roughCol.set([col.r, col.g, col.b], k * 3);
+        if (!inside || edge) {
+          let rx = x, rz = z;
+          if (inside) [rx, rz] = nearestOnPolygon(hole.shape, x, z).point;
+          else if (!island.inside(x, z)) [rx, rz] = island.snap(x, z);
+          roughPos[k * 3] = rx;
+          roughPos[k * 3 + 1] = terrain.height(rx, rz) - ROUGH_DROP + (inside ? 0 : (rand() - 0.5) * 0.025);
+          roughPos[k * 3 + 2] = rz;
+          col.copy(COLORS.rough).lerp(COLORS.roughDark, rand() * 0.6);
+          roughCol[k * 3] = col.r;
+          roughCol[k * 3 + 1] = col.g;
+          roughCol[k * 3 + 2] = col.b;
+        }
       }
     }
 
     const fairIdx = [], roughIdx = [];
-    const cellCentre = (i, j) => [x0 + (i + 0.5) * GRID, z0 + (j + 0.5) * GRID];
     for (let j = 0; j < nz - 1; j++) {
       for (let i = 0; i < nx - 1; i++) {
         const a = j * nx + i, b = a + 1, c = a + nx, d = c + 1;
-        // Split each cell into two triangles and sort each one by its centre.
-        const [mx, mz] = cellCentre(i, j);
+        const mx = x0 + (i + 0.5) * GRID, mz = z0 + (j + 0.5) * GRID;
+        // Cells wholly inside or outside the outline skip the polygon test.
+        const sum = inPoly[a] + inPoly[b] + inPoly[c] + inPoly[d];
         const tris = [[a, c, b, mx - GRID / 6, mz - GRID / 6], [b, c, d, mx + GRID / 6, mz + GRID / 6]];
         for (const [p, q, r, tx, tz] of tris) {
-          if (insidePolygon(hole.shape, tx, tz)) {
-            if (Math.hypot(tx - cx, tz - cz) > CUP_R) fairIdx.push(p, q, r);
+          const inside = sum === 4 ? true : sum === 0 ? false : insidePolygon(hole.shape, tx, tz);
+          if (inside) {
+            if (Math.abs(tx - cx) > CUP_R + GRID || Math.abs(tz - cz) > CUP_R + GRID || Math.hypot(tx - cx, tz - cz) > CUP_R) fairIdx.push(p, q, r);
           } else if (island.inside(tx, tz)) {
             roughIdx.push(p, q, r);
           }
@@ -700,13 +739,23 @@ export class World {
     this.ringBack.renderOrder = 3;
     this.ringBack.visible = false;
     this.scene.add(this.ringBack);
+
+    // A pulsing ring that marks the ball in the overview, where it's tiny.
+    this.ballMarker = new THREE.Mesh(
+      new THREE.RingGeometry(0.24, 0.32, 40),
+      new THREE.MeshBasicMaterial({ color: '#ffd23f', transparent: true, opacity: 0.95, depthTest: false, side: THREE.DoubleSide }),
+    );
+    this.ballMarker.rotation.x = -Math.PI / 2;
+    this.ballMarker.renderOrder = 6;
+    this.ballMarker.visible = false;
+    this.scene.add(this.ballMarker);
     this.ringPower = -1;
   }
 
   // path: [[x, z], ...] from the ball outwards. power 0..1.
   showAim(path, power) {
     const color = powerColor(power);
-    const m = new THREE.Matrix4();
+    const m = SCRATCH.m;
     const n = Math.min(path.length, this.aimDots.instanceMatrix.count);
     for (let i = 0; i < n; i++) {
       const [x, z] = path[i];
@@ -743,7 +792,9 @@ export class World {
   // ---- Effects -----------------------------------------------------------------
 
   burst(x, y, z, { count, colors, speed, up, life, size, gravity = 9 }) {
-    const geo = new THREE.BoxGeometry(size, size * 0.3, size * 0.7);
+    // One flake shape per size, shared by every burst.
+    this.flakes = this.flakes || {};
+    const geo = this.flakes[size] || (this.flakes[size] = new THREE.BoxGeometry(size, size * 0.3, size * 0.7));
     for (let i = 0; i < count; i++) {
       const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: colors[i % colors.length], transparent: true }));
       mesh.position.set(x, y, z);
@@ -791,16 +842,30 @@ export class World {
 
   // Starting pitch and distance for the follow camera.
   defaultView() {
-    return this.camera.aspect < 1 ? { pitch: 0.66, dist: 6.2 } : { pitch: 0.58, dist: 5 };
+    const a = this.camera.aspect;
+    if (a < 1) return { pitch: 0.66, dist: 6.2 };
+    // Wide, short screens (a phone held sideways) sit a little higher and look
+    // further ahead (see updateCamera), so the cup stays in view.
+    return a > 1.7 ? { pitch: 0.6, dist: 6.4 } : { pitch: 0.58, dist: 5 };
   }
 
+  // Distance at which the whole hole fits on screen, measured along the
+  // camera's own axes (so a long hole fills a tall phone screen).
   overviewFit() {
-    const b = this.bounds;
-    const w = b.x1 - b.x0 + 2, d = b.z1 - b.z0 + 2;
-    const span = Math.max(w, d);
+    const yaw = this.cam.yaw, pitch = this.cam.want.pitch;
+    const fx = Math.sin(yaw), fz = Math.cos(yaw);
+    let across = 0, along = 0;
+    for (const [x, z] of this.hole.shape) {
+      const dx = x - this.bounds.cx, dz = z - this.bounds.cz;
+      across = Math.max(across, Math.abs(dx * fz - dz * fx));
+      along = Math.max(along, Math.abs(dx * fx + dz * fz));
+    }
+    across += 0.8;
+    along = along * Math.sin(pitch) + 0.8;
     const vfov = (this.camera.fov * Math.PI) / 180;
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * this.camera.aspect);
-    return (span / 2) / Math.tan(Math.min(vfov, hfov) / 2) * 1.05;
+    // Leave room for the HUD at the top and the buttons at the bottom.
+    return Math.max(across / Math.tan(hfov / 2), along / Math.tan(vfov / 2) / 0.8);
   }
 
   updateCamera(dt, focus) {
@@ -814,7 +879,8 @@ export class World {
       // Look past the ball, in the direction the camera faces. On a tall
       // phone screen look further ahead, so the ball sits low and the hole
       // fills the screen.
-      const ahead = this.camera.aspect < 1 ? 2.0 : 1.1;
+      const a = this.camera.aspect;
+      const ahead = a < 1 ? 2.0 : a > 1.7 ? 1.0 : 1.1;
       want.target.set(
         focus.x + Math.sin(c.yaw) * ahead,
         focus.y,
@@ -851,10 +917,17 @@ export class World {
     if (ballVel) {
       const sp = Math.hypot(ballVel.x, ballVel.z);
       if (sp > 1e-4) {
-        const axis = new THREE.Vector3(ballVel.z / sp, 0, -ballVel.x / sp);
-        const q = new THREE.Quaternion().setFromAxisAngle(axis, (sp * dt) / BALL_R);
-        this.ball.quaternion.premultiply(q);
+        SCRATCH.v.set(ballVel.z / sp, 0, -ballVel.x / sp);
+        SCRATCH.q.setFromAxisAngle(SCRATCH.v, (sp * dt) / BALL_R);
+        this.ball.quaternion.premultiply(SCRATCH.q);
       }
+    }
+
+    const marker = this.ballMarker;
+    marker.visible = this.cam.overview && this.showMarker;
+    if (marker.visible) {
+      marker.position.set(ballPos.x, ballPos.y - BALL_R + 0.02, ballPos.z);
+      marker.scale.setScalar(Math.max(1, this.cam.dist / 7) * (1 + 0.15 * Math.sin(this.time * 5)));
     }
 
     for (const { s, grp } of this.spinners) grp.rotation.y = -spinnerAngle(s, t);
@@ -881,7 +954,7 @@ export class World {
     }
 
     for (const c of this.sky.children) {
-      if (c.userData.bob !== undefined) c.position.y += Math.sin(this.time * 0.5 + c.userData.bob) * 0.002;
+      if (c.userData.bob !== undefined) c.position.y = c.userData.baseY + Math.sin(this.time * 0.5 + c.userData.bob) * 0.25;
     }
     this.sky.rotation.y = this.time * 0.006;
 
@@ -906,6 +979,8 @@ export class World {
     this.renderer.render(this.scene, this.camera);
   }
 }
+
+const SCRATCH = { v: new THREE.Vector3(), q: new THREE.Quaternion(), m: new THREE.Matrix4() };
 
 // 0..1 across the edge of a zone, for painting.
 function zoneEdge(zone, x, z) {

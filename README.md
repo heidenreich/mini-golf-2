@@ -14,23 +14,25 @@ No build step. The only dependency is [three.js](https://threejs.org/) r160, ven
 |---|------|-----|--------------|
 | 1 | Welcome Hill | 2 | A gentle hump down the middle |
 | 2 | Up the Ramp | 2 | A ramp up to a raised green. Too soft and the ball rolls back down |
-| 3 | Dogleg Bowl | 3 | A right-hand dogleg with a bowl in the corner that gathers the ball, then downhill to the cup |
+| 3 | Dogleg Bowl | 3 | A left-hand dogleg with a bowl in the corner that gathers the ball, then downhill to the cup |
 | 4 | Duck Pond | 3 | A pond in the middle of the fairway (+1 stroke, ball returns), a hump on the safe side and a bunker by the cup |
 | 5 | The Sweeper | 3 | Up onto a plateau with a spinning bar, then down to the cup |
 | 6 | Volcano | 3 | The cup sits in a crater on top of a hill. Too soft rolls back, too hard flies over the far rim |
 | 7 | Switchback | 4 | Downhill round two corners, past a bunker, over a small ridge |
-| 8 | Island Green | 3 | Two ponds with a narrow ice bridge between them, or the long way round |
+| 8 | Island Green | 3 | Two ponds with an ice bridge between them, or a narrow path past them along either rail |
 | 9 | Grand Finale | 3 | Two sliding blocks, a ramp and a bowl round the cup |
 
 Your best round is saved in your browser.
 
 ## Controls
 
-- **Drag back** from anywhere on the screen and release to putt, like a slingshot. Full power is a thumb-length pull. A ring round the ball and a bar at the bottom show the power, and dotted guides show how the start of the roll will curve on slopes. A tiny drag cancels.
+- **Drag back** from anywhere on the screen and release to putt, like a slingshot. Full power is a thumb-length pull. A ring round the ball and a bar at the bottom show the power, and dotted guides show how the start of the roll will curve on slopes, through one bounce off a rail. To cancel, bring your finger back to where it started (the bar says "Let go here to cancel") and let go.
 - **Look round:** two-finger drag on a phone (pinch to zoom), right-drag or the mouse wheel on a computer, Q/E on a keyboard, or the ⟲ ⟳ buttons.
-- **⚑** turns the camera to face the flag. **▦** (or V) shows an overview of the whole hole.
-- **Keyboard:** arrow keys aim (left/right) and set power (up/down), Shift for fine steps, Space or Enter putts. R restarts the hole, Esc opens the menu.
+- **⚑** turns the camera to face the flag; it also turns on its own when the ball stops with the flag well out of view. **▦** (or V) shows an overview of the whole hole, with a yellow ring round the ball.
+- **Keyboard:** arrow keys aim (left/right) and set power (up/down), Shift for fine steps, Space or Enter putts. R puts the ball back on the tee, Esc opens the menu.
 - Water costs a stroke and puts the ball back where you played from. The ball is picked up after 8 strokes.
+- **Back to the tee** (R, or in the menu) is a way out of a bad spot, not a do-over: the strokes you've taken still count.
+- Held sideways on a phone, the score chips move to a column on the left so the far end of the hole stays in view.
 
 ## Run locally
 
@@ -57,7 +59,9 @@ How it works:
 
 - **2.5D physics.** The ball rolls on a height field: the slope under it pushes it with 5/7 of gravity (a rolling ball), and it stops only once friction can hold it on that slope, so balls really do roll back down ramps. Rails, the spinner and the blocks are line segments in the ground plane.
 - **What you see is what it rolls on.** The renderer builds the ground mesh from the same height function, and the rails follow it up and down.
-- **Flat round the cup.** Whatever the hole's shape, the ground within 0.3 m of the cup is flat and blends back by 0.7 m, so a ball can stop next to the cup and drops in fairly.
+- **Flat round the cup.** Whatever the hole's shape, the ground within 0.32 m of the cup is flat and blends back by 0.7 m, so a ball can stop next to the cup and drops in fairly.
+- **Stopped means slower than `REST_SPEED`.** A ball pushed against a rail by a slope keeps creeping at a few mm/s; that counts as stopped, so you can always putt it.
+- **Reading slopes.** The ground is shaded by height and steepness, with contour lines every 10 cm of height on sloping ground, and the sun shines from behind the tee so slopes facing you light up.
 - **Timestep:** fixed at 240 Hz, with sub-steps of under half a ball radius so a fast ball can't pass through a rail.
 - **Cup:** a ball slower than `CUP_CAPTURE_SPEED` drops in; a faster one dips over the lip, curls and carries on.
 

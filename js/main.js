@@ -1,22 +1,31 @@
 import { Vector3 } from '../vendor/three.module.min.js';
 import { COURSE } from './courses.js';
 import { makeTerrain, smooth } from './terrain.js';
-import { Sim, STEP, BALL_R } from './physics.js';
+import { Sim, STEP, BALL_R, REST_SPEED } from './physics.js';
 import { World, powerColor } from './render.js';
 
 const MAX_STROKES = 8;          // picked up after this many
 const SETTLE_TIME = 0.3;        // a roll ends once the ball has been still this long
-const MIN_POWER = 0.04;         // weaker drags are cancelled
+const CANCEL_PULL = 16;         // px: let go inside this and the putt is cancelled
 const SAVE_KEY = 'minigolf2';
 
 const $ = id => document.getElementById(id);
 const canvas = $('game');
-const world = new World(canvas);
+let world;
+try {
+  world = new World(canvas);
+} catch (err) {
+  document.getElementById('card').innerHTML = `<h2>Mini Golf 2 can't run here</h2>
+    <p>It needs WebGL, which this browser has turned off or doesn't support.
+    Try another browser, or turn on hardware acceleration in this one's settings.</p>`;
+  document.getElementById('overlay').classList.add('show');
+  throw err;
+}
 const holes = COURSE.holes;
 const coursePar = holes.reduce((s, h) => s + h.par, 0);
 
 const game = {
-  mode: 'title',        // title | aim | rolling | sinking | splash | done | final
+  mode: 'title',        // title | aim | rolling | splash | done | final
   holeIndex: 0,
   strokes: 0,
   scores: [],
@@ -31,9 +40,13 @@ const game = {
 
 // ---- Saving -----------------------------------------------------------------
 
+// Only trusts what it expects, so stray data in storage can't break the game.
 function load() {
   try {
-    return JSON.parse(localStorage.getItem(SAVE_KEY)) || {};
+    const d = JSON.parse(localStorage.getItem(SAVE_KEY));
+    if (!d || typeof d !== 'object' || Array.isArray(d)) return {};
+    if (!Number.isFinite(d.best)) delete d.best;
+    return d;
   } catch {
     return {};
   }
@@ -63,7 +76,7 @@ function ac() {
       return null;
     }
   }
-  if (audio.state === 'suspended') audio.resume();
+  if (audio.state !== 'running') audio.resume().catch(() => {});
   return audio;
 }
 
@@ -140,7 +153,7 @@ function toast(html, ms = 2200) {
 }
 
 function relName(diff) {
-  return diff === 0 ? 'E' : diff > 0 ? `+${diff}` : `${diff}`;
+  return diff === 0 ? 'Even' : diff > 0 ? `+${diff}` : `${diff}`;
 }
 
 function scoreWord(strokes, par) {
@@ -165,7 +178,7 @@ function updateHud() {
   $('hud-hole').textContent = game.holeIndex + 1;
   $('hud-holes').textContent = holes.length;
   $('hud-par').textContent = hole.par;
-  $('hud-strokes').textContent = game.strokes;
+  $('hud-strokes').textContent = Math.min(game.strokes, MAX_STROKES);
   $('hud-name').textContent = hole.name;
   const t = totals();
   $('hud-total').textContent = relName(t.diff);
@@ -189,17 +202,24 @@ function scorecardHtml(current = -1) {
   </table>`;
 }
 
+// While a card is up, the game controls behind it are out of reach.
+function setInert(on) {
+  for (const id of ['hud', 'cam-controls', 'game']) $(id).inert = on;
+}
+
 function showCard(html, { clear = false } = {}) {
   $('card').innerHTML = html;
   const ov = $('overlay');
   ov.classList.add('show');
   ov.classList.toggle('clear', clear);
+  setInert(true);
   const first = $('card').querySelector('button');
   if (first) first.focus({ preventScroll: true });
 }
 
 function hideCard() {
   $('overlay').classList.remove('show');
+  setInert(false);
 }
 
 function setPlaying(on) {
@@ -217,6 +237,7 @@ function showTitle() {
   startHole(0, { quiet: true });
   game.mode = 'title';
   world.cam.overview = true;
+  world.showMarker = false;
   const best = load().best;
   showCard(`
     <h1>Mini Golf <span class="two">2</span></h1>
@@ -240,12 +261,12 @@ function startRound() {
   startHole(0);
 }
 
-function startHole(i, { quiet = false } = {}) {
+function startHole(i, { quiet = false, keepStrokes = false } = {}) {
   game.holeIndex = i;
   const hole = holes[i];
   game.terrain = makeTerrain(hole);
   game.sim = new Sim(hole, game.terrain);
-  game.strokes = 0;
+  if (!keepStrokes) game.strokes = 0;
   game.lastRest = [...hole.tee];
   game.sink = null;
   game.aim = { angle: 0, power: 0, keyboard: false };
@@ -258,6 +279,7 @@ function startHole(i, { quiet = false } = {}) {
   Object.assign(world.cam.want, { yaw, ...view });
   world.cam.target.set(hole.tee[0], game.terrain.height(...hole.tee), hole.tee[1]);
   $('cam-view').setAttribute('aria-pressed', 'false');
+  world.showMarker = true;
 
   game.mode = 'aim';
   updateHud();
@@ -298,6 +320,7 @@ function showFinal() {
     save(data);
   }
   world.cam.overview = true;
+  world.showMarker = false;
   showCard(`
     <h2>Round complete</h2>
     <div class="big">${t.strokes}</div>
@@ -320,7 +343,7 @@ function showMenu() {
     ${scorecardHtml(game.holeIndex)}
     <div class="buttons">
       <button class="btn primary" data-act="resume">Resume</button>
-      <button class="btn" data-act="restart">Restart hole</button>
+      <button class="btn" data-act="restart">Back to the tee</button>
       <button class="btn" data-act="sound">Sound: ${soundOn ? 'on' : 'off'}</button>
       <button class="btn" data-act="title">Quit to title</button>
     </div>`);
@@ -346,11 +369,14 @@ $('card').addEventListener('click', e => {
   }
 });
 
+// Puts the ball back on the tee. Strokes so far still count, so it's a
+// way out of a bad spot rather than a free do-over.
 function restartHole() {
-  if (game.mode === 'title' || game.mode === 'final') return;
+  if (game.mode !== 'aim' && game.mode !== 'rolling') return;
   game.paused = false;
   hideCard();
-  startHole(game.holeIndex, { quiet: true });
+  startHole(game.holeIndex, { quiet: true, keepStrokes: true });
+  if (game.strokes >= MAX_STROKES) pickUp();
 }
 
 // ---- Shots ------------------------------------------------------------------------
@@ -362,6 +388,7 @@ function shoot(angle, power) {
   game.strokes++;
   game.mode = 'rolling';
   game.aim.power = 0;
+  game.aim.keyboard = false;
   world.hideAim();
   $('power').hidden = true;
   $('hint').hidden = true;
@@ -369,21 +396,27 @@ function shoot(angle, power) {
   updateHud();
 }
 
-function endRoll() {
+function pickUp() {
+  finishHole(MAX_STROKES, 'Picked up');
+  toast(`Picked up after ${MAX_STROKES} strokes`);
+}
+
+// The ball is still again (after a putt, a splash or a knock).
+function ballReady() {
   game.mode = 'aim';
   game.lastRest = [game.sim.ball.x, game.sim.ball.z];
-  if (game.strokes >= MAX_STROKES) {
-    finishHole(MAX_STROKES, 'Picked up');
-    toast(`Picked up after ${MAX_STROKES} strokes`);
-  } else if (game.strokes === MAX_STROKES - 1) {
-    toast('Last stroke before the ball is picked up');
-  }
+  if (game.strokes >= MAX_STROKES) return pickUp();
+  if (game.strokes === MAX_STROKES - 1) toast('Last stroke before the ball is picked up');
+  // Turn to the flag if it has gone well out of view.
+  const [cx, cz] = holes[game.holeIndex].cup;
+  const toCup = Math.atan2(cx - game.sim.ball.x, cz - game.sim.ball.z);
+  const off = Math.atan2(Math.sin(toCup - world.cam.want.yaw), Math.cos(toCup - world.cam.want.yaw));
+  if (Math.abs(off) > Math.PI / 3 && !world.cam.overview) world.cam.want.yaw = toCup;
 }
 
 function onPhysicsEvent(ev) {
   const b = game.sim.ball;
   if (ev.type === 'cup') {
-    game.mode = 'sinking';
     game.sink = { x: b.x, z: b.z, t: 0 };
     b.vx = b.vz = 0;
     sfx.cup();
@@ -433,7 +466,7 @@ function physicsStep() {
     }
     if (game.mode === 'rolling' && sim.restTime > SETTLE_TIME) {
       sim.ball.vx = sim.ball.vz = 0;
-      endRoll();
+      ballReady();
     }
   } else {
     sim.t += STEP;
@@ -464,10 +497,7 @@ function placeBall(dt) {
     ballPos.set(s.x, terrain.height(s.x, s.z) + BALL_R - Math.min(0.5, (1.1 - game.timer) * 0.8), s.z);
     if (game.timer <= 0) {
       sim.place(...game.lastRest);
-      game.mode = 'aim';
-      if (game.strokes >= MAX_STROKES) {
-        finishHole(MAX_STROKES, 'Picked up');
-      }
+      ballReady();
     }
     return;
   }
@@ -480,11 +510,12 @@ function predictPath(angle, power) {
   const s = game.sim.clone();
   s.shoot(angle, power);
   const pts = [[s.ball.x, s.ball.z]];
-  const maxLen = 0.9 + power * 2.2;
-  let len = 0, hit = false;
+  const maxLen = 1.2 + power * 3.3;
+  let len = 0, hits = 0;
   let lx = s.ball.x, lz = s.ball.z;
-  for (let i = 0; i < 240 * 3 && !hit; i++) {
-    const ev = s.step(() => { hit = true; });
+  // Follows the roll through one bounce off a rail, and no further.
+  for (let i = 0; i < 240 * 2 && hits < 2; i++) {
+    const ev = s.step(() => { hits++; });
     const d = Math.hypot(s.ball.x - lx, s.ball.z - lz);
     if (d >= 0.11) {
       len += d;
@@ -500,6 +531,15 @@ function predictPath(angle, power) {
 
 function showAim() {
   const { angle, power } = game.aim;
+  const cancelling = drag && drag.pull < CANCEL_PULL;
+  $('power').classList.toggle('cancel', !!cancelling);
+  if (cancelling) {
+    world.hideAim();
+    $('power').hidden = false;
+    $('power-fill').style.width = '0';
+    $('power-text').textContent = 'Let go here to cancel';
+    return;
+  }
   if (power <= 0) {
     world.hideAim();
     $('power').hidden = true;
@@ -520,7 +560,7 @@ let drag = null;     // one finger / left mouse: aiming a putt
 let orbit = null;    // two fingers / right mouse: moving the camera
 
 function fullPull() {
-  return Math.max(110, Math.min(160, Math.min(innerWidth, innerHeight) * 0.3));
+  return Math.max(130, Math.min(170, Math.min(innerWidth, innerHeight) * 0.33));
 }
 
 function cancelDrag() {
@@ -529,6 +569,12 @@ function cancelDrag() {
     game.aim.power = 0;
     showAim();
   }
+}
+
+function resetPointers() {
+  pointers.clear();
+  orbit = null;
+  cancelDrag();
 }
 
 function orbitStart() {
@@ -543,7 +589,11 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 canvas.addEventListener('pointerdown', e => {
   ac();
-  canvas.setPointerCapture(e.pointerId);
+  try {
+    canvas.setPointerCapture(e.pointerId);
+  } catch {
+    // Some browsers refuse capture for synthetic or already-ended pointers.
+  }
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button });
   if (pointers.size >= 2 || e.button === 2 || e.button === 1) {
     cancelDrag();
@@ -551,8 +601,9 @@ canvas.addEventListener('pointerdown', e => {
     return;
   }
   if (game.mode === 'aim' && !game.paused) {
-    drag = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    drag = { x: e.clientX, y: e.clientY, id: e.pointerId, pull: 0 };
     $('hint').hidden = true;
+    $('toast').classList.remove('show');
     game.aim.keyboard = false;
   }
 });
@@ -580,7 +631,8 @@ canvas.addEventListener('pointermove', e => {
   if (drag && drag.id === e.pointerId && game.mode === 'aim') {
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     const pull = Math.hypot(dx, dy);
-    if (pull < 6) {
+    drag.pull = pull;
+    if (pull < CANCEL_PULL) {
       game.aim.power = 0;
     } else {
       game.aim.power = Math.min(1, pull / fullPull());
@@ -600,13 +652,16 @@ function pointerEnd(e) {
   }
   if (drag && drag.id === e.pointerId) {
     const { angle, power } = game.aim;
+    const pull = drag.pull;
     drag = null;
-    if (e.type === 'pointerup' && power >= MIN_POWER) shoot(angle, power);
+    if (e.type === 'pointerup' && pull >= CANCEL_PULL && power > 0) shoot(angle, power);
     else cancelDrag();
   }
 }
 canvas.addEventListener('pointerup', pointerEnd);
 canvas.addEventListener('pointercancel', pointerEnd);
+canvas.addEventListener('lostpointercapture', pointerEnd);
+document.addEventListener('visibilitychange', () => { if (document.hidden) resetPointers(); });
 
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
@@ -634,6 +689,7 @@ holdButton('cam-right', -1);
 
 function toggleOverview(force) {
   const on = force ?? !world.cam.overview;
+  if (on === world.cam.overview) return;
   world.cam.overview = on;
   if (!on) {
     Object.assign(world.cam.want, world.defaultView());
@@ -667,6 +723,8 @@ window.addEventListener('keydown', e => {
     }
     return;
   }
+  // Let Space and Enter press a focused on-screen button.
+  if (e.target instanceof HTMLButtonElement && (e.key === ' ' || e.key === 'Enter')) return;
   ac();
   const k = e.key.toLowerCase();
   if (k === 'escape') return showMenu();
@@ -674,13 +732,42 @@ window.addEventListener('keydown', e => {
   if (k === 'v') return toggleOverview();
   if (k === 'f') return faceFlag();
   if (['arrowleft', 'arrowright', 'arrowup', 'arrowdown', ' ', 'enter', 'q', 'e'].includes(k)) e.preventDefault();
-  if ((k === ' ' || k === 'enter') && game.aim.keyboard && game.aim.power >= MIN_POWER) {
+  if ((k === ' ' || k === 'enter') && game.aim.keyboard && game.aim.power > 0) {
     return shoot(game.aim.angle, game.aim.power);
+  }
+  // A quick tap can come and go between frames, so the first press of an
+  // arrow key takes effect here; holding it keeps going in handleKeys.
+  if (KEY_NUDGE[k] && !keys.has(k) && game.mode === 'aim' && !game.paused) {
+    startKeyboardAim();
+    const fine = e.shiftKey ? 0.25 : 1;
+    game.aim.angle += KEY_NUDGE[k][0] * fine;
+    game.aim.power = Math.max(0, Math.min(1, game.aim.power + KEY_NUDGE[k][1] * fine));
+    aimFromKeyboard();
   }
   keys.add(k);
 });
+
+// [angle, power] for one tap of each arrow key.
+const KEY_NUDGE = {
+  arrowleft: [0.03, 0], arrowright: [-0.03, 0],
+  arrowup: [0, 0.02], arrowdown: [0, -0.02],
+};
+
+function startKeyboardAim() {
+  if (game.aim.keyboard) return;
+  game.aim.keyboard = true;
+  game.aim.angle = world.cam.want.yaw;
+  if (game.aim.power <= 0) game.aim.power = 0.3;
+}
+
+// The camera looks down the keyboard aim.
+function aimFromKeyboard() {
+  world.cam.want.yaw = game.aim.angle;
+  toggleOverview(false);
+  showAim();
+}
 window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
-window.addEventListener('blur', () => { keys.clear(); turning = 0; });
+window.addEventListener('blur', () => { keys.clear(); turning = 0; resetPointers(); });
 
 function handleKeys(dt) {
   if (keys.has('q')) world.cam.want.yaw += dt * 1.6;
@@ -690,34 +777,32 @@ function handleKeys(dt) {
   const fine = keys.has('shift') ? 0.25 : 1;
   let changed = false;
   const startKeyboard = () => {
-    if (!game.aim.keyboard) {
-      game.aim.keyboard = true;
-      game.aim.angle = world.cam.want.yaw;
-      if (game.aim.power <= 0) game.aim.power = 0.3;
-    }
+    startKeyboardAim();
     changed = true;
   };
   if (keys.has('arrowleft')) { startKeyboard(); game.aim.angle += dt * 1.1 * fine; }
   if (keys.has('arrowright')) { startKeyboard(); game.aim.angle -= dt * 1.1 * fine; }
   if (keys.has('arrowup')) { startKeyboard(); game.aim.power = Math.min(1, game.aim.power + dt * 0.5 * fine); }
   if (keys.has('arrowdown')) { startKeyboard(); game.aim.power = Math.max(0, game.aim.power - dt * 0.5 * fine); }
-  if (changed) {
-    world.cam.want.yaw = game.aim.angle;
-    toggleOverview(false);
-    showAim();
-  }
+  if (changed) aimFromKeyboard();
 }
 
 // ---- Main loop ----------------------------------------------------------------------
 
+let wasPortrait = innerWidth < innerHeight;
 function resize() {
   world.resize(innerWidth, innerHeight);
+  // Turning the phone changes the best follow-camera framing.
+  const portrait = innerWidth < innerHeight;
+  if (portrait !== wasPortrait && !world.cam.overview) Object.assign(world.cam.want, world.defaultView());
+  wasPortrait = portrait;
 }
 window.addEventListener('resize', resize);
 resize();
 
 let last = performance.now();
 let acc = 0;
+let aimTick = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
@@ -731,8 +816,10 @@ function frame(now) {
     if (game.mode === 'title' || game.mode === 'final') world.cam.want.yaw += dt * 0.12;
   }
   placeBall(game.paused ? 0 : dt);
-  // Keep the aim dots in step with moving obstacles.
-  if (game.mode === 'aim' && game.aim.power > 0 && (game.sim.hole.spinners || game.sim.hole.movers)) showAim();
+  // Keep the aim dots in step with moving obstacles (a few times a second
+  // is enough, and saves phones a lot of work).
+  aimTick = (aimTick + 1) % 4;
+  if (aimTick === 0 && game.mode === 'aim' && game.aim.power > 0 && (game.sim.hole.spinners || game.sim.hole.movers)) showAim();
   world.update(game.paused ? 0 : dt, game.sim, ballPos, ballVel);
   world.updateCamera(dt, ballPos);
   world.render();

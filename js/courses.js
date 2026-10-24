@@ -118,16 +118,16 @@ export const COURSE = {
     {
       name: 'Island Green',
       par: 3,
-      tip: 'Cross the narrow bridge, or play it safe round the side.',
+      tip: 'Cross the icy bridge, or squeeze down the narrow path by a rail.',
       shape: [[-3, -1], [3, -1], [3, 14], [-3, 14]],
       tee: [0, 0],
       cup: [0.8, 12.2],
       ground: [
-        { type: 'tilt', gx: 0.02 },
+        { type: 'tilt', gx: 0.01 },
       ],
       zones: [
-        { type: 'water', x: -2.05, z: 7.6, w: 3.0, d: 4.4 },
-        { type: 'water', x: 2.05, z: 7.6, w: 3.0, d: 4.4 },
+        { type: 'water', x: -1.55, z: 7.6, w: 1.9, d: 4.4 },
+        { type: 'water', x: 1.55, z: 7.6, w: 1.9, d: 4.4 },
         { type: 'ice', x: 0, z: 7.6, w: 1.1, d: 4.4, rect: true },
       ],
     },
