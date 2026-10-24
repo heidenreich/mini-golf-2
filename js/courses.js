@@ -4,6 +4,8 @@
 //   shape     outline of the fairway [x, z]; its edges become the boundary walls
 //   tee, cup  [x, z]
 //   look      where the camera first faces (defaults to the cup)
+//   route     points round the corners of a dogleg, tee to cup; when the
+//             ball stops, the camera turns to the furthest one it can see
 //   ground    height features, added together (see terrain.js):
 //               tilt   { gx, gz }                   a plane over the whole hole
 //               ramp   { axis, from, to, rise }     a smooth step from one level to another
@@ -50,6 +52,7 @@ export const COURSE = {
       tee: [0, 0],
       cup: [10.6, 9.75],
       look: [0, 9],
+      route: [[0, 9.6], [10.6, 9.75]],
       ground: [
         { type: 'hill', x: 0, z: 9.6, r: 2.0, h: -0.35 },
         { type: 'ramp', axis: 'x', from: 3, to: 9, rise: -0.45 },
@@ -106,6 +109,7 @@ export const COURSE = {
       tee: [0, 0],
       cup: [6.5, 12.4],
       look: [0, 6.5],
+      route: [[0, 6.6], [6.5, 6.6], [6.5, 12.4]],
       ground: [
         { type: 'ramp', axis: 'z', from: 1, to: 4, rise: -0.5 },
         { type: 'ramp', axis: 'x', from: 2, to: 4.5, rise: -0.4 },

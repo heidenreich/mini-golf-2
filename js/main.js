@@ -407,11 +407,33 @@ function ballReady() {
   game.lastRest = [game.sim.ball.x, game.sim.ball.z];
   if (game.strokes >= MAX_STROKES) return pickUp();
   if (game.strokes === MAX_STROKES - 1) toast('Last stroke before the ball is picked up');
-  // Turn to the flag if it has gone well out of view.
-  const [cx, cz] = holes[game.holeIndex].cup;
-  const toCup = Math.atan2(cx - game.sim.ball.x, cz - game.sim.ball.z);
-  const off = Math.atan2(Math.sin(toCup - world.cam.want.yaw), Math.cos(toCup - world.cam.want.yaw));
-  if (Math.abs(off) > Math.PI / 3 && !world.cam.overview) world.cam.want.yaw = toCup;
+  // Turn to face down the hole if the view has drifted well off it.
+  const yaw = lookYaw();
+  if (yaw === null || world.cam.overview) return;
+  const off = Math.atan2(Math.sin(yaw - world.cam.want.yaw), Math.cos(yaw - world.cam.want.yaw));
+  if (Math.abs(off) > Math.PI / 5) world.cam.want.yaw = yaw;
+}
+
+// Direction to the furthest point along the hole (its route round any
+// corners, then the cup) that the ball can see without a rail in the way.
+// Null when none is in sight.
+function lookYaw() {
+  const hole = holes[game.holeIndex];
+  const { x, z } = game.sim.ball;
+  const targets = [...(hole.route || []), hole.cup];
+  for (let i = targets.length - 1; i >= 0; i--) {
+    const [tx, tz] = targets[i];
+    if (Math.hypot(tx - x, tz - z) < 0.5) continue;
+    if (game.sim.walls.every(w => !segmentsCross(x, z, tx, tz, w))) return Math.atan2(tx - x, tz - z);
+  }
+  return null;
+}
+
+function segmentsCross(ax, az, bx, bz, w) {
+  const side = (px, pz, qx, qz, rx, rz) => (qx - px) * (rz - pz) - (qz - pz) * (rx - px);
+  const d1 = side(w.x1, w.z1, w.x2, w.z2, ax, az), d2 = side(w.x1, w.z1, w.x2, w.z2, bx, bz);
+  const d3 = side(ax, az, bx, bz, w.x1, w.z1), d4 = side(ax, az, bx, bz, w.x2, w.z2);
+  return d1 * d2 < 0 && d3 * d4 < 0;
 }
 
 function onPhysicsEvent(ev) {
