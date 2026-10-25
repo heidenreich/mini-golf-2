@@ -240,6 +240,35 @@ body.aiming #hud-name { visibility: hidden; }
   .scorecard th, .scorecard td { padding: 2px; }
 }
 
+/* Labels over the signposts when choosing which bridge to cross. */
+#paths { position: fixed; inset: 0; pointer-events: none; }
+.path-choice {
+  position: fixed;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 140px;
+  padding: 10px 16px;
+  border: 3px solid #fff;
+  border-radius: 18px;
+  background: var(--ink);
+  color: #fff;
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+  white-space: nowrap;
+  animation: path-bob 1.6s ease-in-out infinite;
+}
+.path-choice b { font-size: 17px; }
+.path-choice span { font-size: 13px; opacity: 0.85; }
+.path-choice.gold { background: #b07d0c; border-color: #ffe08a; }
+.path-choice.locked { background: rgba(31, 53, 80, 0.55); border-style: dashed; pointer-events: none; animation: none; }
+.path-choice:focus-visible { outline: 3px solid #ffd23f; outline-offset: 3px; }
+@keyframes path-bob { 50% { margin-top: -6px; } }
+@media (prefers-reduced-motion: reduce) { .path-choice { animation: none; } }
+
 /* A white-out while crossing a bridge between islands. */
 #fade {
   position: fixed;

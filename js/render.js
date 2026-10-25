@@ -809,17 +809,66 @@ export class World {
     const pin = anchor(tx, tz, -fx, -fz);
     this.bridgeIn = this.makeBridge(g, pin, -fx, -fz, 'next');
 
-    const outs = links.outs || [];
-    const nexts = outs.filter(k => k === 'next').length;
+    const outs = (links.outs || []).map(o => (typeof o === 'string' ? { kind: o } : o));
+    const nexts = outs.filter(o => o.kind === 'next').length;
     let n = 0;
-    for (const kind of outs) {
+    for (const { kind, name, par } of outs) {
       let a = 0;
-      if (kind === 'next') a = nexts > 1 ? (n++ === 0 ? 0.5 : -0.5) : 0;
+      if (kind === 'next') a = nexts > 1 ? (n++ === 0 ? 0.8 : -0.8) : 0;
       else a = 1.3;
       const [dx, dz] = rot(a);
       const p = anchor(cx, cz, dx, dz);
-      this.bridgesOut.push(this.makeBridge(g, p, dx, dz, kind));
+      const b = this.makeBridge(g, p, dx, dz, kind);
+      if (name) {
+        const sp = this.makeSignpost(g, p, dx, dz, kind, name, par);
+        b.sign = sp.pos;
+        b.paintSign = sp.paint;
+      }
+      this.bridgesOut.push(b);
     }
+  }
+
+  // A wooden signpost beside a bridge's entrance, naming where it leads.
+  // Returns the point above it where a label can float.
+  makeSignpost(g, p, dx, dz, kind, name, par) {
+    const gold = kind !== 'next';
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 112;
+    const ctx = c.getContext('2d');
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const paint = k => {
+      const gilt = k !== 'next';
+      ctx.fillStyle = gilt ? '#e8b84a' : '#c99a62';
+      ctx.fillRect(0, 0, 256, 112);
+      ctx.strokeStyle = gilt ? '#a8761a' : '#7a5530';
+      ctx.lineWidth = 8;
+      ctx.strokeRect(4, 4, 248, 104);
+      ctx.fillStyle = '#3a2412';
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 30px Fredoka, system-ui, sans-serif';
+      ctx.fillText(name, 128, 50, 236);
+      ctx.font = '600 24px Fredoka, system-ui, sans-serif';
+      ctx.fillText(k === 'locked' ? 'Bonus \u00b7 birdie to open' : gilt ? `Bonus \u00b7 par ${par}` : `Par ${par}`, 128, 86, 236);
+      tex.needsUpdate = true;
+    };
+    paint(kind);
+    // Beside the bridge on the right as you walk onto it, facing the island.
+    const sx = dz * 0.62, sz = -dx * 0.62;
+    const x = p.x - sx - dx * 0.25, z = p.z - sz - dz * 0.25;
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 1.0, 6), lambert('#6b4a2c'));
+    post.position.set(x, p.y + 0.5, z);
+    post.castShadow = true;
+    const board = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.28, 0.03), [
+      lambert('#7a5530'), lambert('#7a5530'), lambert('#7a5530'), lambert('#7a5530'),
+      lambert('#ffffff', { map: tex }), lambert('#7a5530'),
+    ]);
+    board.position.set(x, p.y + 0.86, z);
+    board.rotation.y = Math.atan2(-dx, -dz);   // the painted face looks back at the island
+    board.castShadow = true;
+    g.add(post, board);
+    return { pos: new THREE.Vector3(x, p.y + 1.15, z), paint };
   }
 
   // A sagging plank bridge from shore point p heading off (dx, dz) into the
@@ -899,6 +948,7 @@ export class World {
     for (const b of this.bridgesOut || []) {
       if (b.kind !== 'locked') continue;
       b.kind = 'gold';
+      if (b.paintSign) b.paintSign('gold');
       b.plankMat.color.set('#e8b84a');
       b.plankMat.emissiveIntensity = 0.35;
       b.ropeMat.emissiveIntensity = 0.5;
@@ -911,6 +961,62 @@ export class World {
     }
   }
 
+  // Swing the camera round to look out over the bridges leading on, so you
+  // can pick one. Off again with releaseBridges().
+  lookAtBridges() {
+    const outs = this.bridgesOut.filter(b => b.sign);
+    if (!outs.length) return;
+    const mid = new THREE.Vector3(), dir = new THREE.Vector3();
+    for (const b of outs) {
+      mid.add(b.path[0]);
+      dir.add(new THREE.Vector3(b.dx, 0, b.dz));
+    }
+    mid.divideScalar(outs.length);
+    dir.normalize();
+    // Step back (and up) until every signpost is comfortably on screen.
+    const look = mid.clone().addScaledVector(dir, 1.5).add(new THREE.Vector3(0, -0.3, 0));
+    const probe = this.camera.clone();
+    let pos = null;
+    for (let back = 3; back < 20; back += 0.5) {
+      pos = mid.clone().addScaledVector(dir, -back).add(new THREE.Vector3(0, 1.4 + back * 0.35, 0));
+      probe.position.copy(pos);
+      probe.lookAt(look);
+      probe.updateMatrixWorld();
+      const fits = outs.every(b => {
+        const v = b.sign.clone().project(probe);
+        return Math.abs(v.x) < 0.62 && v.y < 0.75 && v.y > -0.6 && v.z < 1;
+      });
+      if (fits) break;
+    }
+    this.viewBridges = { pos, look, lookNow: null };
+  }
+
+  releaseBridges() {
+    this.viewBridges = null;
+  }
+
+  updateBridgeView(dt) {
+    const v = this.viewBridges;
+    const k = 1 - Math.exp(-dt * 3);
+    this.camera.position.lerp(v.pos, k);
+    if (!v.lookNow) {
+      v.lookNow = new THREE.Vector3();
+      this.camera.getWorldDirection(v.lookNow);
+      v.lookNow.multiplyScalar(4).add(this.camera.position);
+    }
+    v.lookNow.lerp(v.look, k);
+    this.camera.lookAt(v.lookNow);
+  }
+
+  // Signposts on screen, for the labels you tap: [{ x, y, visible }].
+  signsOnScreen() {
+    return this.bridgesOut.map(b => {
+      if (!b.sign) return null;
+      const v = b.sign.clone().project(this.camera);
+      return { x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight, visible: v.z < 1 };
+    });
+  }
+
   // ---- Travelling between islands ---------------------------------------------
 
   // Flies the camera along `points` (eased) over `dur` seconds, looking ahead.
@@ -920,6 +1026,7 @@ export class World {
 
   // Off along the n-th bridge leading out of this island.
   flyOut(n, onDone) {
+    this.viewBridges = null;
     const b = this.bridgesOut[n];
     this.cinematicLandsAtBall = false;
     if (!b) return onDone && onDone();
@@ -1691,6 +1798,7 @@ export class World {
 
   updateCamera(dt, focus) {
     if (this.cinematic) return this.updateCinematic(dt);
+    if (this.viewBridges) return this.updateBridgeView(dt);
     const c = this.cam, want = c.want;
     if (c.overview) {
       const b = this.bounds;

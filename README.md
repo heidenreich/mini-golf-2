@@ -8,7 +8,7 @@ No build step. The only dependency is [three.js](https://threejs.org/) r160, ven
 
 ## Course
 
-**Sky Islands**: 13 floating islands linked by rope bridges. A round crosses nine of them. After each hole you pick the next island on the course map, and the camera flies you across the bridge to it. Where a stage has two islands, you choose one.
+**Sky Islands**: 13 floating islands linked by rope bridges. A round crosses nine of them. Each bridge has a signpost naming the island it leads to. Where a stage has two islands you choose: the camera looks out over the bridges, you tap the label over the one you want, and it flies you across. With only one way on, it flies you straight there. The pause menu shows the whole course map and your route.
 
 Each hole sits on its own themed floating island: a wobbly outline with bays and headlands, an underside of earth and rock hanging into the sky, things dangling off the edge (vines, roots, icicles, crystals or lava), waterfalls on the greener islands, wisps of cloud round the base and small rocks drifting alongside. The fairways have rounded, cloud-soft outlines; rails stay straight where a hole is built around bank shots or moving blocks.
 

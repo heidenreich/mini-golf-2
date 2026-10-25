@@ -343,6 +343,61 @@ function showMap({ browse = false } = {}) {
   if (first) first.focus({ preventScroll: true });
 }
 
+// ---- Choosing a path -----------------------------------------------------------------
+
+// The camera looks out over the bridges leading on, and a label floats
+// over each one's signpost; tap one to cross.
+function choosePath() {
+  hideCard();
+  setPlaying(false);
+  game.mode = 'choose';
+  world.lookAtBridges();
+  const box = $('paths');
+  box.innerHTML = game.links.map((l, n) => {
+    const h = holes[l.hole];
+    const theme = (THEMES[h.theme] || THEMES.meadow).name;
+    if (l.kind === 'locked') {
+      return `<div class="path-choice locked" data-n="${n}"><b>${h.name}</b><span>Bonus island &middot; birdie to open</span></div>`;
+    }
+    return `<button class="path-choice ${l.kind === 'gold' ? 'gold' : ''}" data-n="${n}" data-go="${l.hole}">
+      <b>${h.name}</b><span>Par ${h.par} &middot; ${l.kind === 'gold' ? 'bonus island' : theme}</span></button>`;
+  }).join('');
+  box.hidden = false;
+  placePathLabels();
+  const first = box.querySelector('button');
+  if (first) first.focus({ preventScroll: true });
+}
+
+// Keeps each label over its signpost as the camera moves.
+function placePathLabels() {
+  const box = $('paths');
+  if (box.hidden) return;
+  const spots = world.signsOnScreen();
+  // Over each signpost, then nudged apart so no two overlap and none runs
+  // off the side of the screen.
+  const items = [...box.children].map(el => ({ el, p: spots[Number(el.dataset.n)], w: el.offsetWidth, h: el.offsetHeight }))
+    .filter(it => it.p)
+    .sort((a, b) => a.p.x - b.p.x);
+  const placed = [];
+  for (const it of items) {
+    let x = Math.max(it.w / 2 + 8, Math.min(innerWidth - it.w / 2 - 8, it.p.x));
+    let y = it.p.y;
+    for (const q of placed) {
+      const overlapX = Math.abs(x - q.x) < (it.w + q.w) / 2 + 6, overlapY = Math.abs(y - q.y) < (it.h + q.h) / 2 + 6;
+      if (overlapX && overlapY) y = q.y - (it.h + q.h) / 2 - 8;
+    }
+    y = Math.max(it.h + 60, y);
+    placed.push({ x, y, w: it.w, h: it.h });
+    it.el.style.visibility = it.p.visible ? 'visible' : 'hidden';
+    it.el.style.transform = `translate(-50%, -100%) translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+  }
+}
+
+$('paths').addEventListener('click', e => {
+  const go = e.target.closest('[data-go]');
+  if (go) travelTo(Number(go.dataset.go));
+});
+
 // ---- Travelling ----------------------------------------------------------------------
 
 function fade(on) {
@@ -352,6 +407,7 @@ function fade(on) {
 // Off along this island's bridge to `hole`, then in along the next one's.
 function travelTo(hole) {
   const n = game.links.findIndex(l => l.hole === hole);
+  $('paths').hidden = true;
   hideCard();
   setPlaying(false);
   game.mode = 'travel';
@@ -467,6 +523,8 @@ function setPlaying(on) {
 
 function showTitle() {
   game.mode = 'title';
+  $('paths').hidden = true;
+  world.releaseBridges();
   game.paused = false;
   setPlaying(false);
   fade(false);
@@ -518,7 +576,9 @@ function startHole(i, { quiet = false, keepStrokes = false } = {}) {
   if (!keepStrokes && !game.route.some(r => r.hole === i)) game.route.push({ hole: i, stage: game.stage, bonus: !!game.onBonus, score: null });
   game.links = nextChoices();
   saveRound();
-  world.buildHole(hole, game.terrain, i, { outs: game.links.map(l => l.kind) });
+  world.buildHole(hole, game.terrain, i, {
+    outs: game.links.map(l => ({ kind: l.kind, name: holes[l.hole].name, par: holes[l.hole].par })),
+  });
 
   const look = hole.look || hole.cup;
   const yaw = Math.atan2(look[0] - hole.tee[0], look[1] - hole.tee[1]);
@@ -559,7 +619,7 @@ function finishHole(score, note = '') {
     ? '<button class="btn primary" data-act="final">See your score</button>'
     : only != null
       ? `<button class="btn primary" data-go="${only}">Next hole: ${holes[only].name}</button>`
-      : '<button class="btn primary" data-act="map">Choose the next island</button>';
+      : '<button class="btn primary" data-act="paths">Choose your path</button>';
   setTimeout(() => {
     if (game.mode !== 'done') return;
     showCard(`
@@ -624,6 +684,7 @@ $('card').addEventListener('click', e => {
   if (act === 'play') startRound();
   else if (act === 'resume-round') resumeRound();
   else if (act === 'map') showMap();
+  else if (act === 'paths') choosePath();
   else if (act === 'map-browse') showMap({ browse: true });
   else if (act === 'menu') { game.paused = false; showMenu(); }
   else if (act === 'final') showFinal();
@@ -1190,6 +1251,7 @@ function frame(now) {
   world.updateCamera(dt, ballPos);
   world.render();
   updateGrabRing();
+  if (game.mode === 'choose') placePathLabels();
   requestAnimationFrame(frame);
 }
 
