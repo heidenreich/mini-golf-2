@@ -1,7 +1,10 @@
+import { roundShape } from './terrain.js';
+
 // Every hole is plain data. Units are roughly metres; z runs away from the
 // tee and x runs across (+x is on your left as you face down the hole).
 //
 //   shape     outline of the fairway [x, z]; its edges become the boundary walls
+//   round     how far (m) each corner of the outline is rounded off
 //   tee, cup  [x, z]
 //   look      where the camera first faces (defaults to the cup)
 //   route     points round the corners of a dogleg, tee to cup; when the
@@ -28,6 +31,14 @@
 //   theme     the island's look (see themes.js): meadow, desert, autumn, pond,
 //             tulips, volcano, beach, winter or night
 
+// An oval outline with n corners (rounded off afterwards like any other).
+function ellipse(cx, cz, rx, rz, n) {
+  return Array.from({ length: n }, (_, i) => {
+    const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+    return [cx + Math.cos(a) * rx, cz + Math.sin(a) * rz];
+  });
+}
+
 export const COURSE = {
   id: 'sky',
   name: 'Sky Islands',
@@ -37,7 +48,8 @@ export const COURSE = {
       theme: 'meadow',
       par: 2,
       tip: 'Drag back from the ball and let go to putt. Drag anywhere else to look round.',
-      shape: [[-1.5, -1], [1.5, -1], [1.5, 13], [-1.5, 13]],
+      shape: [[-1.5, -1], [1.5, -1], [1.7, 3], [2.3, 6], [1.7, 9], [1.6, 13], [-1.6, 13], [-1.7, 9], [-2.3, 6], [-1.7, 3]],
+      round: 1.0,
       tee: [0, 0],
       cup: [0.4, 11.4],
       ground: [
@@ -49,7 +61,8 @@ export const COURSE = {
       theme: 'desert',
       par: 2,
       tip: 'Up the kicker and over the gap. Too soft and it drops in.',
-      shape: [[-1.5, -1], [1.5, -1], [1.5, 13], [-1.5, 13]],
+      shape: [[-1.5, -1], [1.5, -1], [1.5, 8], [2.0, 10.5], [1.6, 13], [-1.6, 13], [-2.0, 10.5], [-1.5, 8]],
+      round: 0.8,
       tee: [0, 0],
       cup: [0.4, 10.8],
       ground: [
@@ -65,6 +78,7 @@ export const COURSE = {
       par: 3,
       tip: 'The bowl in the corner gathers the ball. Drag the view round to see past the bend.',
       shape: [[-1.5, -1], [1.5, -1], [1.5, 8], [12, 8], [12, 11.5], [0, 11.5], [-1.5, 10]],
+      round: 0.5,
       tee: [0, 0],
       cup: [10.6, 9.75],
       look: [0, 9],
@@ -79,7 +93,8 @@ export const COURSE = {
       theme: 'pond',
       par: 3,
       tip: 'Water costs a stroke and puts you back. Bumpers behind the cup kick an overhit back.',
-      shape: [[-2.5, -1], [2.5, -1], [2.5, 14], [-2.5, 14]],
+      shape: [[-2.5, -1], [2.5, -1], [2.9, 4], [2.6, 9], [2.8, 14], [-2.6, 14], [-2.9, 9], [-2.6, 4]],
+      round: 1.2,
       tee: [0, 0],
       cup: [-1, 11.8],
       ground: [
@@ -100,7 +115,8 @@ export const COURSE = {
       theme: 'tulips',
       par: 3,
       tip: 'Time it through the door between the sails, or go round the side.',
-      shape: [[-1.6, -1], [1.6, -1], [1.6, 13], [-1.6, 13]],
+      shape: [[-1.6, -1], [1.6, -1], [2.0, 2.5], [1.6, 5], [1.6, 8], [2.1, 10.5], [1.6, 13], [-1.6, 13], [-2.1, 10.5], [-1.6, 8], [-1.6, 5], [-2.0, 2.5]],
+      round: 0.9,
       tee: [0, 0],
       cup: [0, 10.6],
       ground: [
@@ -117,7 +133,8 @@ export const COURSE = {
       theme: 'volcano',
       par: 3,
       tip: 'The cup sits in the crater. Hit it hard enough to climb the slope.',
-      shape: [[-3, -1], [3, -1], [3, 12], [-3, 12]],
+      shape: ellipse(0, 5.4, 3.3, 6.6, 12),
+      round: 1.0,
       tee: [0, 0],
       cup: [0, 7.4],
       ground: [
@@ -131,6 +148,7 @@ export const COURSE = {
       par: 4,
       tip: 'Downhill, round two corners, then a little rise to the cup.',
       shape: [[-1.5, -1], [1.5, -1], [1.5, 5], [8, 5], [8, 14], [5, 14], [5, 8.2], [-1.5, 8.2]],
+      round: 0.5,
       tee: [0, 0],
       cup: [6.5, 12.4],
       look: [0, 6.5],
@@ -150,7 +168,8 @@ export const COURSE = {
       tip: 'The whole island is frozen, so everything slides further. Cross the ice bridge, or squeeze down a rail.',
       theme: 'winter',
       surface: 'frost',
-      shape: [[-3, -1], [3, -1], [3, 14], [-3, 14]],
+      shape: [[-3, -1], [3, -1], [3.3, 4], [3.3, 11], [3, 14], [-3, 14], [-3.3, 11], [-3.3, 4]],
+      round: 1.5,
       tee: [0, 0],
       cup: [0.8, 12.2],
       ground: [
@@ -167,7 +186,8 @@ export const COURSE = {
       theme: 'night',
       par: 3,
       tip: 'Slip past the sliding blocks, or find the warp pipe on the right.',
-      shape: [[-2, -1], [2, -1], [2, 18], [-2, 18]],
+      shape: [[-2, -1], [2, -1], [2, 10.8], [2.6, 14], [1.8, 18], [-1.8, 18], [-2.6, 14], [-2, 10.8]],
+      round: 1.0,
       tee: [0, 0],
       cup: [0, 16],
       ground: [
@@ -187,3 +207,7 @@ export const COURSE = {
     },
   ],
 };
+
+for (const hole of COURSE.holes) {
+  if (hole.round) hole.shape = roundShape(hole.shape, hole.round);
+}

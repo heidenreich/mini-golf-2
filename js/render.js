@@ -7,8 +7,8 @@ import { THEMES, rng, lambert, makeTree, makeDrift, skyTexture } from './themes.
 // physics and rules live in physics.js and main.js.
 
 const GRID = 0.1;            // ground mesh resolution (m)
-const ISLAND_MARGIN = 1.9;   // rough grass between the rails and the island's edge
-const ISLAND_CORNER = 1.6;
+const ISLAND_MIN = 1.2;      // the island reaches this far past the rails at least...
+const ISLAND_VARY = 1.2;     // ...and up to this much further, varying round the edge
 const ROUGH_DROP = 0.05;     // rough sits a touch below the fairway
 const RAIL_TOP = 0.13;
 const RAIL_BOTTOM = -0.22;
@@ -51,44 +51,82 @@ function bounds(pts) {
   return { x0, x1, z0, z1, cx: (x0 + x1) / 2, cz: (z0 + z1) / 2 };
 }
 
-// The island under a hole is a rounded rectangle around its rails.
-function makeIsland(b) {
-  const x0 = b.x0 - ISLAND_MARGIN, x1 = b.x1 + ISLAND_MARGIN;
-  const z0 = b.z0 - ISLAND_MARGIN, z1 = b.z1 + ISLAND_MARGIN;
-  const r = ISLAND_CORNER;
-  const core = (x, z) => [Math.max(x0 + r, Math.min(x1 - r, x)), Math.max(z0 + r, Math.min(z1 - r, z))];
-  return {
-    x0, x1, z0, z1,
+// Smooth random bumps (value noise, two octaves), 0..1.
+function noise2(seed) {
+  const hash = (i, j) => {
+    let h = Math.imul(i, 374761393) ^ Math.imul(j, 668265263) ^ Math.imul(seed, 2246822519);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  const one = (x, z) => {
+    const i = Math.floor(x), j = Math.floor(z), fx = x - i, fz = z - j;
+    const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+    const a = hash(i, j), b = hash(i + 1, j), c = hash(i, j + 1), d = hash(i + 1, j + 1);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  };
+  return (x, z) => one(x, z) * 0.7 + one(x * 2.3 + 17, z * 2.3 + 5) * 0.3;
+}
+
+// The island under a hole: everything within a wobbly distance of the
+// fairway, so its edge has bays and headlands instead of straight sides.
+function makeIsland(shape, b, seed) {
+  const bump = noise2(seed);
+  const reach = (x, z) => ISLAND_MIN + ISLAND_VARY * bump(x * 0.33, z * 0.33);
+  const pad = ISLAND_MIN + ISLAND_VARY + 0.2;
+  let grid = null;   // distance to the fairway on the ground grid, once known
+  // Distance from (x, z) to the fairway, read off the grid when there is one.
+  const fairwayDist = (x, z) => {
+    if (!grid) return nearestOnPolygon(shape, x, z).dist;
+    const fx = (x - grid.x0) / GRID, fz = (z - grid.z0) / GRID;
+    const i = Math.floor(fx), j = Math.floor(fz);
+    if (i < 0 || j < 0 || i >= grid.nx - 1 || j >= grid.nz - 1) return nearestOnPolygon(shape, x, z).dist;
+    const u = fx - i, v = fz - j, d = grid.d, n = grid.nx, k = j * n + i;
+    return d[k] * (1 - u) * (1 - v) + d[k + 1] * u * (1 - v) + d[k + n] * (1 - u) * v + d[k + n + 1] * u * v;
+  };
+  const island = {
+    x0: b.x0 - pad, x1: b.x1 + pad, z0: b.z0 - pad, z1: b.z1 + pad,
     inside(x, z, inset = 0) {
-      const [qx, qz] = core(x, z);
-      return Math.hypot(x - qx, z - qz) <= r - inset && x >= x0 + inset && x <= x1 - inset && z >= z0 + inset && z <= z1 - inset;
+      if (insidePolygon(shape, x, z)) return true;
+      return fairwayDist(x, z) + inset <= reach(x, z);
     },
-    snap(x, z) {
-      const [qx, qz] = core(x, z);
-      const d = Math.hypot(x - qx, z - qz);
-      if (d <= r) return [x, z];
-      return [qx + ((x - qx) * r) / d, qz + ((z - qz) * r) / d];
-    },
-    outline(step) {
-      const pts = [];
-      const arc = (cx, cz, a0) => {
-        const n = Math.max(4, Math.round((Math.PI / 2 * r) / step));
-        for (let i = 0; i < n; i++) {
-          const a = a0 + (i / n) * (Math.PI / 2);
-          pts.push([cx + Math.cos(a) * r, cz + Math.sin(a) * r]);
+    // Measure every grid node's distance to the fairway in two sweeps
+    // (a chamfer distance: close enough for the island's wobbly edge).
+    useGrid(x0, z0, nx, nz, inPoly) {
+      const d = new Float32Array(nx * nz);
+      for (let k = 0; k < d.length; k++) d[k] = inPoly[k] ? 0 : 1e9;
+      const D1 = GRID, D2 = GRID * Math.SQRT2;
+      const relax = (k, k2, s) => { if (d[k2] + s < d[k]) d[k] = d[k2] + s; };
+      for (let j = 0; j < nz; j++) {
+        for (let i = 0; i < nx; i++) {
+          const k = j * nx + i;
+          if (i > 0) relax(k, k - 1, D1);
+          if (j > 0) { relax(k, k - nx, D1); if (i > 0) relax(k, k - nx - 1, D2); if (i < nx - 1) relax(k, k - nx + 1, D2); }
         }
-      };
-      const edge = (ax, az, bx, bz) => {
-        const n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / step));
-        for (let i = 0; i < n; i++) pts.push([ax + ((bx - ax) * i) / n, az + ((bz - az) * i) / n]);
-      };
-      edge(x0 + r, z0, x1 - r, z0); arc(x1 - r, z0 + r, -Math.PI / 2);
-      edge(x1, z0 + r, x1, z1 - r); arc(x1 - r, z1 - r, 0);
-      edge(x1 - r, z1, x0 + r, z1); arc(x0 + r, z1 - r, Math.PI / 2);
-      edge(x0, z1 - r, x0, z0 + r); arc(x0 + r, z0 + r, Math.PI);
-      return pts;
+      }
+      for (let j = nz - 1; j >= 0; j--) {
+        for (let i = nx - 1; i >= 0; i--) {
+          const k = j * nx + i;
+          if (i < nx - 1) relax(k, k + 1, D1);
+          if (j < nz - 1) { relax(k, k + nx, D1); if (i < nx - 1) relax(k, k + nx + 1, D2); if (i > 0) relax(k, k + nx - 1, D2); }
+        }
+      }
+      grid = { x0, z0, nx, nz, d };
+    },
+    // The point on the island's edge on the way from the fairway out to (x, z).
+    snap(x, z) {
+      if (island.inside(x, z)) return [x, z];
+      const [qx, qz] = nearestOnPolygon(shape, x, z).point;
+      const dx = x - qx, dz = z - qz, len = Math.hypot(dx, dz);
+      let lo = 0, hi = len;
+      for (let k = 0; k < 12; k++) {
+        const mid = (lo + hi) / 2;
+        if (island.inside(qx + (dx * mid) / len, qz + (dz * mid) / len)) lo = mid;
+        else hi = mid;
+      }
+      return [qx + (dx * lo) / len, qz + (dz * lo) / len];
     },
   };
+  return island;
 }
 
 // Pale blue ice with long streaks and a few cracks. `aspect` is width / length.
@@ -262,10 +300,11 @@ export class World {
     this.applySky(theme);
     const g = this.holeGroup = new THREE.Group();
     const b = this.bounds = bounds(hole.shape);
-    const island = this.island = makeIsland(b);
+    const island = this.island = makeIsland(hole.shape, b, 11 + index * 7);
 
     this.buildGround(g, hole, terrain, island);
-    this.buildSkirt(g, terrain, island);
+    this.buildUnderside(g, terrain, island);
+    this.buildIslandDressing(g, hole, terrain, island, index);
     this.buildRails(g, hole, terrain);
     this.buildWater(g, hole, terrain);
     this.buildIce(g, hole, terrain);
@@ -358,11 +397,30 @@ export class World {
     const gaps = hole.gaps || [];
     const inCut = (x, z) => cuts.some(([ux, uz, r]) => Math.hypot(x - ux, z - uz) < r) || gaps.some(gp => z > gp.z1 && z < gp.z2);
 
+    const inIsl = new Uint8Array(nx * nz);
     for (let j = 0; j < nz; j++) {
       for (let i = 0; i < nx; i++) {
         inPoly[j * nx + i] = insidePolygon(hole.shape, x0 + i * GRID, z0 + j * GRID) ? 1 : 0;
       }
     }
+    island.useGrid(x0, z0, nx, nz, inPoly);
+    for (let j = 0; j < nz; j++) {
+      for (let i = 0; i < nx; i++) {
+        const k = j * nx + i;
+        inIsl[k] = inPoly[k] || island.inside(x0 + i * GRID, z0 + j * GRID) ? 1 : 0;
+      }
+    }
+    // Next to the island's edge (and so worth snapping onto it).
+    const nearShore = (i, j) => {
+      for (let dj = -1; dj <= 1; dj++) {
+        for (let di = -1; di <= 1; di++) {
+          const a = i + di, b = j + dj;
+          if (a >= 0 && b >= 0 && a < nx && b < nz && inIsl[b * nx + a]) return true;
+        }
+      }
+      return false;
+    };
+    this.grid = { x0, z0, nx, nz, inPoly, inIsl, roughPos };
     // Only vertices next to the outline need snapping onto it.
     const nearEdge = (i, j) => {
       const v = inPoly[j * nx + i];
@@ -425,10 +483,10 @@ export class World {
         }
 
         // Rough vertex
-        if (!inside || edge) {
+        if ((!inside || edge) && (inIsl[k] || nearShore(i, j))) {
           let rx = x, rz = z;
           if (inside) [rx, rz] = nearestOnPolygon(hole.shape, x, z).point;
-          else if (!island.inside(x, z)) [rx, rz] = island.snap(x, z);
+          else if (!inIsl[k]) [rx, rz] = island.snap(x, z);
           roughPos[k * 3] = rx;
           roughPos[k * 3 + 1] = terrain.height(rx, rz) - ROUGH_DROP + (inside ? 0 : (rand() - 0.5) * 0.025);
           roughPos[k * 3 + 2] = rz;
@@ -447,12 +505,13 @@ export class World {
         const mx = x0 + (i + 0.5) * GRID, mz = z0 + (j + 0.5) * GRID;
         // Cells wholly inside or outside the outline skip the polygon test.
         const sum = inPoly[a] + inPoly[b] + inPoly[c] + inPoly[d];
+        const isl = inIsl[a] + inIsl[b] + inIsl[c] + inIsl[d];
         const tris = [[a, c, b, mx - GRID / 6, mz - GRID / 6], [b, c, d, mx + GRID / 6, mz + GRID / 6]];
         for (const [p, q, r, tx, tz] of tris) {
           const inside = sum === 4 ? true : sum === 0 ? false : insidePolygon(hole.shape, tx, tz);
           if (inside) {
             if (!inCut(tx, tz)) fairIdx.push(p, q, r);
-          } else if (island.inside(tx, tz)) {
+          } else if (isl === 4 || (isl > 0 && island.inside(tx, tz))) {
             roughIdx.push(p, q, r);
           }
         }
@@ -477,58 +536,274 @@ export class World {
     g.add(mesh(roughPos, roughCol, roughIdx, lambert('#ffffff', { vertexColors: true })));
   }
 
-  // The island's crumbly underside.
-  buildSkirt(g, terrain, island) {
-    const ring = island.outline(0.35);
-    const rand = rng(5);
-    const cx = (island.x0 + island.x1) / 2, cz = (island.z0 + island.z1) / 2;
-    let minH = Infinity;
-    const tops = ring.map(([x, z]) => {
-      const h = terrain.height(x, z) - ROUGH_DROP;
-      minH = Math.min(minH, h);
-      return h;
-    });
-    const layers = [
-      { scale: 1, drop: 0, color: this.pal.rough },
-      { scale: 1.0, drop: 0.12, color: this.pal.roughDark },
-      { scale: 0.97, drop: 0.5, color: this.pal.dirtTop },
-      { scale: 0.82, drop: 1.4, color: this.pal.dirt },
-      { scale: 0.55, drop: 2.6, color: this.pal.dirt },
-      { scale: 0.25, drop: 3.8, color: this.pal.rock },
-    ];
-    const pos = [], colr = [];
-    const n = ring.length;
-    const pt = (li, i) => {
-      const L = layers[li];
-      const [x, z] = ring[i % n];
-      const jitter = li > 1 ? (rand() - 0.5) * 0.25 : 0;
-      const y = li < 2 ? tops[i % n] - L.drop : minH - L.drop + jitter;
-      return [cx + (x - cx) * L.scale + jitter, y, cz + (z - cz) * L.scale + jitter];
-    };
-    // Precompute so neighbouring quads share jittered points.
-    const grid = layers.map((_, li) => ring.map((__, i) => pt(li, i)));
-    for (let li = 0; li < layers.length - 1; li++) {
-      for (let i = 0; i < n; i++) {
-        const a = grid[li][i], b = grid[li][(i + 1) % n];
-        const c = grid[li + 1][i], d = grid[li + 1][(i + 1) % n];
-        pos.push(...a, ...c, ...b, ...b, ...c, ...d);
-        const ca = layers[li].color, cb = layers[li + 1].color;
-        for (const cc of [ca, cb, ca, ca, cb, cb]) colr.push(cc.r, cc.g, cc.b);
+  // The island's underside: an upside-down mountain of earth and rock,
+  // deepest under the middle, with craggy points hanging off it.
+  buildUnderside(g, terrain, island) {
+    const { x0, z0, nx, nz, inIsl, roughPos } = this.grid;
+    const N = nx * nz;
+    // Distance from each island node to the edge (two-pass chamfer).
+    const dist = new Float32Array(N).fill(1e9);
+    for (let j = 0; j < nz; j++) {
+      for (let i = 0; i < nx; i++) {
+        const k = j * nx + i;
+        if (!inIsl[k]) { dist[k] = 0; continue; }
+        if (i === 0 || j === 0 || i === nx - 1 || j === nz - 1) dist[k] = 0;
       }
     }
-    const apex = [cx, minH - 5.5, cz];
-    const last = layers.length - 1;
-    for (let i = 0; i < n; i++) {
-      const a = grid[last][i], b = grid[last][(i + 1) % n];
-      pos.push(...a, ...apex, ...b);
-      const rock = this.pal.rock;
-      for (let k = 0; k < 3; k++) colr.push(rock.r, rock.g, rock.b);
+    const D1 = GRID, D2 = GRID * Math.SQRT2;
+    const relax = (k, k2, d) => { if (dist[k2] + d < dist[k]) dist[k] = dist[k2] + d; };
+    for (let j = 0; j < nz; j++) {
+      for (let i = 0; i < nx; i++) {
+        const k = j * nx + i;
+        if (i > 0) relax(k, k - 1, D1);
+        if (j > 0) { relax(k, k - nx, D1); if (i > 0) relax(k, k - nx - 1, D2); if (i < nx - 1) relax(k, k - nx + 1, D2); }
+      }
+    }
+    let maxD = 0;
+    for (let j = nz - 1; j >= 0; j--) {
+      for (let i = nx - 1; i >= 0; i--) {
+        const k = j * nx + i;
+        if (i < nx - 1) relax(k, k + 1, D1);
+        if (j < nz - 1) { relax(k, k + nx, D1); if (i < nx - 1) relax(k, k + nx + 1, D2); if (i > 0) relax(k, k + nx - 1, D2); }
+        maxD = Math.max(maxD, dist[k]);
+      }
+    }
+    this.grid.dist = dist;
+
+    const bump = noise2(41);
+    const pal = this.pal;
+    const deep = 3 + maxD * 0.45;
+    const pos = new Float32Array(N * 3), colr = new Float32Array(N * 3);
+    const col = new THREE.Color();
+    this.undersideBottom = Infinity;
+    for (let j = 0; j < nz; j++) {
+      for (let i = 0; i < nx; i++) {
+        const k = j * nx + i;
+        let x = x0 + i * GRID, z = z0 + j * GRID;
+        if (!inIsl[k]) { x = roughPos[k * 3]; z = roughPos[k * 3 + 2]; }
+        const d = dist[k];
+        const top = terrain.height(x, z) - ROUGH_DROP;
+        const t = Math.min(1, d / maxD);
+        // A thin lip at the edge, then down to a deep point in the middle.
+        const depth = (1 - Math.exp(-d / 0.6)) * 0.45 + deep * Math.pow(t, 0.85) + (bump(x * 0.9, z * 0.9) - 0.5) * 0.7 * Math.min(1, d / 1.5);
+        const y = top - depth;
+        pos.set([x, y, z], k * 3);
+        this.undersideBottom = Math.min(this.undersideBottom, y);
+        // Earth near the top, then bands of rock further down.
+        if (depth < 0.18) col.copy(pal.roughDark);
+        else if (depth < 0.8) col.copy(pal.dirtTop).lerp(pal.dirt, (depth - 0.18) / 0.62);
+        else col.copy(pal.dirt).lerp(pal.rock, Math.min(1, (depth - 0.8) / 2.5));
+        col.multiplyScalar(0.92 + 0.12 * Math.sin(y * 5 + bump(x, z) * 3));
+        colr.set([col.r, col.g, col.b], k * 3);
+      }
+    }
+    const idx = [];
+    for (let j = 0; j < nz - 1; j++) {
+      for (let i = 0; i < nx - 1; i++) {
+        const a = j * nx + i, b = a + 1, c = a + nx, d = c + 1;
+        const isl = inIsl[a] + inIsl[b] + inIsl[c] + inIsl[d];
+        if (isl === 0) continue;
+        const mx = x0 + (i + 0.5) * GRID, mz = z0 + (j + 0.5) * GRID;
+        if (isl < 4 && !island.inside(mx, mz)) continue;
+        idx.push(a, b, c, b, d, c);   // facing down
+      }
     }
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colr, 3));
+    geo.setIndex(idx);
     geo.computeVertexNormals();
-    g.add(new THREE.Mesh(geo, lambert('#ffffff', { vertexColors: true, flatShading: true })));
+    g.add(new THREE.Mesh(geo, lambert('#ffffff', { vertexColors: true })));
+
+    // Rocky points hanging from the deeper parts.
+    const rand = rng(17);
+    const rockMat = lambert(pal.rock, { flatShading: true });
+    let tries = 0, made = 0;
+    while (made < 14 && tries++ < 400) {
+      const k = Math.floor(rand() * N);
+      if (!inIsl[k] || dist[k] < 0.7) continue;
+      const len = 0.5 + rand() * 1.4 * Math.min(1, dist[k] / 2);
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.12 + rand() * 0.25, len, 6), rockMat);
+      cone.rotation.x = Math.PI;
+      cone.position.set(pos[k * 3], pos[k * 3 + 1] - len / 2 + 0.1, pos[k * 3 + 2]);
+      g.add(cone);
+      made++;
+    }
+  }
+
+  // Points round the island's edge, each with the direction facing out.
+  shorePoints(spacing) {
+    const { x0, z0, nx, nz, inIsl, roughPos } = this.grid;
+    const pts = [];
+    const taken = new Map();
+    for (let j = 1; j < nz - 1; j++) {
+      for (let i = 1; i < nx - 1; i++) {
+        const k = j * nx + i;
+        if (inIsl[k]) continue;
+        if (!(inIsl[k - 1] || inIsl[k + 1] || inIsl[k - nx] || inIsl[k + nx])) continue;
+        const x = roughPos[k * 3], z = roughPos[k * 3 + 2];
+        const key = `${Math.round(x / spacing)},${Math.round(z / spacing)}`;
+        if (taken.has(key)) continue;
+        taken.set(key, true);
+        const [qx, qz] = nearestOnPolygon(this.hole.shape, x, z).point;
+        const l = Math.hypot(x - qx, z - qz) || 1;
+        pts.push({ x, z, nx: (x - qx) / l, nz: (z - qz) / l, y: this.terrain.height(x, z) - ROUGH_DROP });
+      }
+    }
+    return pts;
+  }
+
+  // What makes it look like it floats: things hanging off the edge,
+  // waterfalls, wisps of cloud round the base and little rocks drifting
+  // alongside.
+  buildIslandDressing(g, hole, terrain, island, index) {
+    const theme = this.theme;
+    const rand = rng(300 + index * 13);
+    this.floaters = [];
+    const shore = this.shorePoints(0.45);
+    const night = !!theme.night;
+
+    // Along the edge: vines, roots, icicles or drips of lava.
+    const edge = theme.edge;
+    const vine = lambert('#3f8f3a', { flatShading: true });
+    const root = lambert('#6b4a2c', { flatShading: true });
+    const ice = lambert('#e6f6ff', { emissive: '#bfe6ff', emissiveIntensity: 0.3 });
+    const lava = new THREE.MeshBasicMaterial({ color: '#ff6a1a' });
+    for (const p of shore) {
+      if (!edge || rand() < 0.45) continue;
+      const x = p.x - p.nx * 0.06, z = p.z - p.nz * 0.06;
+      if (edge === 'icicles' || edge === 'lava') {
+        const len = 0.15 + rand() * (edge === 'lava' ? 0.35 : 0.55);
+        const c = new THREE.Mesh(new THREE.ConeGeometry(0.03 + rand() * 0.04, len, 5), edge === 'lava' ? lava : ice);
+        c.rotation.x = Math.PI;
+        c.position.set(x, p.y - 0.05 - len / 2, z);
+        g.add(c);
+      } else {
+        const len = 0.3 + rand() * 0.9;
+        const strand = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.018, len, 4), edge === 'vines' ? vine : root);
+        strand.position.set(x, p.y - len / 2, z);
+        strand.rotation.z = (rand() - 0.5) * 0.3;
+        g.add(strand);
+        if (edge === 'vines') {
+          for (let k = 0; k < 3; k++) {
+            const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(0.04, 0), vine);
+            leaf.position.set(x + (rand() - 0.5) * 0.06, p.y - len * (0.2 + k * 0.3), z + (rand() - 0.5) * 0.06);
+            g.add(leaf);
+          }
+        }
+      }
+    }
+
+    // Waterfalls pouring off each side, with a little stream feeding them.
+    this.falls = [];
+    if (theme.waterfall && shore.length) {
+      const cx = (island.x0 + island.x1) / 2;
+      const zs = shore.map(p => p.z), zmin = Math.min(...zs), zmax = Math.max(...zs);
+      for (const side of [-1, 1]) {
+        const cands = shore.filter(p => (p.x - cx) * side > 0 && p.z > zmin + (zmax - zmin) * 0.3 && p.z < zmax - (zmax - zmin) * 0.25 && Math.abs(p.nx) > 0.7);
+        if (!cands.length) continue;
+        const p = cands[Math.floor(rand() * cands.length)];
+        this.addWaterfall(g, p);
+      }
+    }
+
+    // Wisps of cloud round the island's base.
+    const wispMat = lambert(night ? '#4a5580' : '#ffffff', { flatShading: true, transparent: true, opacity: 0.88, emissive: night ? '#000000' : '#e8f1fa', emissiveIntensity: 0.35 });
+    const puff = new THREE.IcosahedronGeometry(1, 1);
+    for (let i = 0; i < 9 && shore.length; i++) {
+      const p = shore[Math.floor(rand() * shore.length)];
+      const wisp = new THREE.Group();
+      for (let k = 0; k < 3; k++) {
+        const m = new THREE.Mesh(puff, wispMat);
+        const sc = 0.35 + rand() * 0.35;
+        m.scale.set(sc * 1.6, sc * 0.55, sc);
+        m.position.set((k - 1) * 0.45, rand() * 0.15, rand() * 0.3);
+        wisp.add(m);
+      }
+      const out = 0.3 + rand() * 0.8;
+      wisp.position.set(p.x + p.nx * out, p.y - 1 - rand() * 1.8, p.z + p.nz * out);
+      wisp.rotation.y = Math.atan2(p.nx, p.nz) + Math.PI / 2;
+      g.add(wisp);
+      this.floaters.push({ obj: wisp, baseY: wisp.position.y, amp: 0.08, rate: 0.4 + rand() * 0.3, phase: rand() * 6 });
+    }
+
+    // A few small rocks drifting alongside, some with a plant on top.
+    const cx = (island.x0 + island.x1) / 2, cz = (island.z0 + island.z1) / 2;
+    const half = Math.max(island.x1 - island.x0, island.z1 - island.z0) / 2;
+    for (let i = 0; i < 4; i++) {
+      const a = rand() * Math.PI * 2, r = half * (0.7 + rand() * 0.3) + 1.5 + rand() * 2;
+      const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+      if (island.inside(x, z, -0.8)) continue;
+      const isle = new THREE.Group();
+      const size = 0.35 + rand() * 0.4;
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(size, size * 0.9, 0.12, 8), lambert(this.pal.rough, { flatShading: true }));
+      const under = new THREE.Mesh(new THREE.ConeGeometry(size * 0.9, size * 2.6, 8), lambert(this.pal.dirt, { flatShading: true }));
+      under.rotation.x = Math.PI;
+      under.position.y = -0.06 - size * 1.3;
+      isle.add(top, under);
+      if (rand() < 0.6) {
+        const plant = theme.scenery(this, rand, false);
+        if (plant) {
+          plant.scale.multiplyScalar(0.6);
+          plant.position.y = 0.06;
+          isle.add(plant);
+        }
+      }
+      isle.position.set(x, terrain.height(cx, cz) - 0.6 + (rand() - 0.5) * 2, z);
+      g.add(isle);
+      this.floaters.push({ obj: isle, baseY: isle.position.y, amp: 0.15, rate: 0.5 + rand() * 0.3, phase: rand() * 6 });
+    }
+  }
+
+  addWaterfall(g, p) {
+    const W = 0.42, H = 5.5;
+    // Streaky water that scrolls downwards...
+    const c = document.createElement('canvas');
+    c.width = 32;
+    c.height = 128;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#7fd0f5';
+    ctx.fillRect(0, 0, 32, 128);
+    const rand = rng(5);
+    for (let i = 0; i < 40; i++) {
+      ctx.fillStyle = `rgba(255,255,255,${0.3 + rand() * 0.5})`;
+      ctx.fillRect(rand() * 32, rand() * 128, 1 + rand() * 2, 10 + rand() * 30);
+    }
+    const map = new THREE.CanvasTexture(c);
+    map.wrapS = map.wrapT = THREE.RepeatWrapping;
+    map.repeat.set(1, 2.5);
+    map.colorSpace = THREE.SRGBColorSpace;
+    // ...and fades out as it falls.
+    const a = document.createElement('canvas');
+    a.width = 4;
+    a.height = 64;
+    const actx = a.getContext('2d');
+    const grad = actx.createLinearGradient(0, 0, 0, 64);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.6, '#bbbbbb');
+    grad.addColorStop(1, '#000000');
+    actx.fillStyle = grad;
+    actx.fillRect(0, 0, 4, 64);
+    const mat = new THREE.MeshBasicMaterial({ map, alphaMap: new THREE.CanvasTexture(a), transparent: true, side: THREE.DoubleSide, depthWrite: false });
+    const fall = new THREE.Mesh(new THREE.PlaneGeometry(W, H), mat);
+    fall.position.set(p.x + p.nx * 0.08, p.y - H / 2 + 0.02, p.z + p.nz * 0.08);
+    fall.rotation.y = Math.atan2(p.nx, p.nz);
+    g.add(fall);
+    // The stream across the rough to the edge.
+    const stream = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.8, 0.7), new THREE.MeshBasicMaterial({ map, transparent: true, opacity: 0.9 }));
+    stream.rotation.x = -Math.PI / 2;
+    stream.rotation.z = Math.atan2(p.nx, p.nz);
+    const ix = p.x - p.nx * 0.33, iz = p.z - p.nz * 0.33;
+    stream.position.set(ix, this.terrain.height(ix, iz) - ROUGH_DROP + 0.015, iz);
+    g.add(stream);
+    // Spray where it disappears into the clouds below.
+    for (let k = 0; k < 3; k++) {
+      const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3 + k * 0.08, 1), lambert('#ffffff', { transparent: true, opacity: 0.7, emissive: '#e8f1fa', emissiveIntensity: 0.4 }));
+      m.position.set(p.x + p.nx * 0.2 + (k - 1) * 0.25, p.y - H + 0.4, p.z + p.nz * 0.2);
+      m.scale.y = 0.5;
+      g.add(m);
+    }
+    this.falls.push(map);
   }
 
   // Rails follow the ground, so they climb ramps with it.
@@ -566,7 +841,8 @@ export class World {
         quad(prev.rt, prev.rb, cur.rt, cur.rb, COLORS.railSide);
         prev = cur;
       }
-      posts.push([x1, z1], [x2, z2]);
+      // Posts go every so often along a run of rail (see below), and at the
+      // ends of any extra walls.
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -578,6 +854,18 @@ export class World {
     rails.userData.glow = '#2f6fa8';
     g.add(rails);
 
+    // Around the outline: a post every ~1.5 m of rail and at sharp corners.
+    let run = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const [ax, az] = pts[(i + pts.length - 1) % pts.length], [px, pz] = pts[i], [bx, bz] = pts[(i + 1) % pts.length];
+      const turn = Math.abs(Math.atan2((px - ax) * (bz - pz) - (pz - az) * (bx - px), (px - ax) * (bx - px) + (pz - az) * (bz - pz)));
+      if (turn > 0.6 || run > 1.5 || i === 0) {
+        posts.push([px, pz]);
+        run = 0;
+      }
+      run += Math.hypot(bx - px, bz - pz);
+    }
+    for (const [x1, z1, x2, z2] of hole.walls || []) posts.push([x1, z1], [x2, z2]);
     const postGeo = new THREE.CylinderGeometry(WALL_HALF + 0.03, WALL_HALF + 0.035, 0.42, 10);
     const capGeo = new THREE.SphereGeometry(WALL_HALF + 0.03, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2);
     const postMat = lambert(COLORS.post);
@@ -699,11 +987,12 @@ export class World {
 
   // A chasm right across the fairway, with a hazard stripe on each lip.
   buildGaps(g, hole, terrain) {
-    const { x0, x1 } = this.bounds;
     const dark = lambert(this.theme.chasm.wall, { side: THREE.DoubleSide });
     // A lava floor glows; others are just dark.
     const deep = new THREE.MeshBasicMaterial({ color: this.theme.chasm.floor });
     for (const gp of hole.gaps || []) {
+      // The chasm runs between the rails where it crosses the fairway.
+      const [x0, x1] = spanAt(hole.shape, (gp.z1 + gp.z2) / 2);
       const w = x1 - x0, mid = (x0 + x1) / 2, depth = 1.6;
       for (const z of [gp.z1, gp.z2]) {
         const y = terrain.height(mid, z);
@@ -1210,6 +1499,8 @@ export class World {
     pos.needsUpdate = true;
 
     if (this.drift && !reduceMotion) this.drift.update(dt, this.time);
+    for (const f of this.floaters || []) f.obj.position.y = f.baseY + Math.sin(this.time * f.rate + f.phase) * f.amp;
+    for (const map of this.falls || []) map.offset.y += dt * 1.4;
     if (this.themeUpdate) this.themeUpdate(dt, this.time);
     this.updateFireworks(dt);
 
@@ -1251,6 +1542,19 @@ export class World {
 
 const SCRATCH = { v: new THREE.Vector3(), q: new THREE.Quaternion(), m: new THREE.Matrix4() };
 const reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Where an outline crosses the line at z: its leftmost and rightmost x.
+function spanAt(pts, z) {
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    const [x1, z1] = pts[i], [x2, z2] = pts[(i + 1) % pts.length];
+    if ((z1 - z) * (z2 - z) > 0 || z1 === z2) continue;
+    const x = x1 + ((z - z1) / (z2 - z1)) * (x2 - x1);
+    lo = Math.min(lo, x);
+    hi = Math.max(hi, x);
+  }
+  return [lo, hi];
+}
 
 // 0..1 across the edge of a zone, for painting.
 function zoneEdge(zone, x, z) {

@@ -9,6 +9,8 @@ import { insidePolygon } from './terrain.js';
 //             island's underside, plus `glossy` for a shiny fairway
 //   sky       gradient colours, fog colour and the lights
 //   chasm     colours for the walls and floor of a gap
+//   edge      what hangs off the island's edge: vines, roots, icicles or lava
+//   waterfall true for streams pouring off each side
 //   scenery   (api, rand, roomy) => an Object3D for a spot in the rough;
 //             roomy is true well away from the rails, where tall things fit
 //   flora     how many small ground details to scatter, and how to make one
@@ -422,6 +424,8 @@ const CHASM = { wall: '#4a3526', floor: '#1d1611' };
 export const THEMES = {
   meadow: {
     name: 'Spring meadow',
+    edge: 'vines',
+    waterfall: true,
     ground: { ...GRASS, rough: C('#5aa63c'), roughDark: C('#4c9434'), ...DIRT },
     sky: SUMMER_SKY,
     chasm: CHASM,
@@ -432,6 +436,7 @@ export const THEMES = {
 
   desert: {
     name: 'Desert canyon',
+    edge: 'roots',
     ground: {
       grassA: C('#8cc152'), grassB: C('#7fb548'), green: C('#9bd15c'),
       rough: C('#e0b27a'), roughDark: C('#cf9a5e'),
@@ -446,6 +451,8 @@ export const THEMES = {
 
   autumn: {
     name: 'Autumn forest',
+    edge: 'roots',
+    waterfall: true,
     ground: {
       grassA: C('#9cc25a'), grassB: C('#8fb54f'), green: C('#a9cf63'),
       rough: C('#8e9440'), roughDark: C('#7a7e34'), ...DIRT,
@@ -461,6 +468,8 @@ export const THEMES = {
 
   pond: {
     name: 'Lily pond',
+    edge: 'vines',
+    waterfall: true,
     ground: { ...GRASS, rough: C('#4fa23a'), roughDark: C('#3f8f30'), ...DIRT },
     sky: SUMMER_SKY,
     chasm: CHASM,
@@ -472,6 +481,7 @@ export const THEMES = {
 
   tulips: {
     name: 'Tulip fields',
+    edge: 'vines',
     ground: { ...GRASS, rough: C('#5fae3e'), roughDark: C('#529e35'), ...DIRT },
     sky: SUMMER_SKY,
     chasm: CHASM,
@@ -483,6 +493,7 @@ export const THEMES = {
 
   volcano: {
     name: 'Volcanic island',
+    edge: 'lava',
     ground: {
       grassA: C('#6fae47'), grassB: C('#62a03f'), green: C('#7cbf52'),
       rough: C('#3b3533'), roughDark: C('#2b2624'),
@@ -498,6 +509,8 @@ export const THEMES = {
 
   beach: {
     name: 'Tropical beach',
+    edge: 'vines',
+    waterfall: true,
     ground: {
       ...GRASS, rough: C('#f0dca4'), roughDark: C('#e3c98c'),
       dirtTop: C('#e3c98c'), dirt: C('#b89a6a'), rock: C('#8a7f72'),
@@ -511,6 +524,7 @@ export const THEMES = {
 
   winter: {
     name: 'Frozen island',
+    edge: 'icicles',
     ground: {
       grassA: C('#e4f4fc'), grassB: C('#d2eaf7'), green: C('#ffffff'),
       rough: C('#f5f9fc'), roughDark: C('#dde7ef'), ...DIRT, glossy: true, sparkle: true,
@@ -524,6 +538,7 @@ export const THEMES = {
 
   night: {
     name: 'Night',
+    edge: 'vines',
     night: true,
     ground: { ...GRASS, rough: C('#3f8a3a'), roughDark: C('#33772f'), ...DIRT },
     sky: { top: '#070b26', bottom: '#28356e', fog: '#1d2652', hemi: ['#8fa6ff', '#1d2b3a', 0.75], sun: ['#c9d6ff', 1.5] },

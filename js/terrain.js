@@ -47,6 +47,32 @@ export function zoneContains(zone, x, z, scale = 1) {
   return dx * dx + dz * dz <= 1;
 }
 
+// Replaces every corner of an outline with a smooth curve, so rails bend
+// round rather than meeting at a point. `r` is how far back along each edge
+// the curve starts (shortened on short edges).
+export function roundShape(pts, r, steps = 6) {
+  const out = [];
+  const n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const [px, pz] = pts[i];
+    const [ax, az] = pts[(i + n - 1) % n], [bx, bz] = pts[(i + 1) % n];
+    const la = Math.hypot(ax - px, az - pz), lb = Math.hypot(bx - px, bz - pz);
+    const t = Math.min(r, la * 0.45, lb * 0.45);
+    const p1 = [px + ((ax - px) * t) / la, pz + ((az - pz) * t) / la];
+    const p2 = [px + ((bx - px) * t) / lb, pz + ((bz - pz) * t) / lb];
+    // A quadratic curve from p1 to p2 with the corner as its control point.
+    for (let k = 0; k <= steps; k++) {
+      const u = k / steps, a = (1 - u) * (1 - u), b = 2 * u * (1 - u), c = u * u;
+      out.push([a * p1[0] + b * px + c * p2[0], a * p1[1] + b * pz + c * p2[1]]);
+    }
+  }
+  // Drop points that landed on top of each other (straight-through corners).
+  return out.filter((p, i) => {
+    const q = out[(i + 1) % out.length];
+    return Math.hypot(p[0] - q[0], p[1] - q[1]) > 1e-4;
+  });
+}
+
 export function insidePolygon(pts, x, z) {
   let inside = false;
   for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {

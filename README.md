@@ -10,7 +10,7 @@ No build step. The only dependency is [three.js](https://threejs.org/) r160, ven
 
 **Sky Islands** (9 holes, par 26)
 
-Each hole sits on its own themed island.
+Each hole sits on its own themed floating island: a wobbly outline with bays and headlands, an underside of earth and rock hanging into the sky, things dangling off the edge (vines, roots, icicles or lava), waterfalls on the greener islands, wisps of cloud round the base and small rocks drifting alongside. The fairways have rounded, cloud-soft outlines; rails stay straight where a hole is built around bank shots or moving blocks.
 
 | # | Hole | Par | Island | What's on it |
 |---|------|-----|--------|--------------|
@@ -64,6 +64,7 @@ How it works:
 - **What you see is what it rolls on.** The renderer builds the ground mesh from the same height function, and the rails follow it up and down.
 - **Flat round the cup.** Whatever the hole's shape, the ground within 0.32 m of the cup is flat and blends back by 0.7 m, so a ball can stop next to the cup and drops in fairly.
 - **Stopped means slower than `REST_SPEED`.** A ball pushed against a rail by a slope keeps creeping at a few mm/s; that counts as stopped, so you can always putt it.
+- **Rounded fairways.** Holes are drawn as simple outlines and `round` (in each hole's data) turns every corner into a curve before play, so the rails, physics and drawing all use the same smooth shape.
 - **Reading slopes.** The ground is shaded by height and steepness, with contour lines every 10 cm of height on sloping ground, and the sun shines from behind the tee so slopes facing you light up.
 - **Timestep:** fixed at 240 Hz, with sub-steps of under half a ball radius so a fast ball can't pass through a rail.
 - **Cup:** a ball slower than `CUP_CAPTURE_SPEED` drops in; a faster one dips over the lip, curls and carries on.
