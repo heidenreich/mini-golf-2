@@ -552,15 +552,21 @@ function finishHole(score, note = '') {
     world.unlockGold();
     setTimeout(() => toast('The golden bridge is open!<small>Your birdie unlocked the bonus island.</small>', 3000), 600);
   }
+  // With only one island to go to, skip the map and head straight there.
+  const open = game.links.filter(l => l.kind !== 'locked');
+  const only = open.length === 1 ? open[0].hole : null;
+  const nextButton = last
+    ? '<button class="btn primary" data-act="final">See your score</button>'
+    : only != null
+      ? `<button class="btn primary" data-go="${only}">Next hole: ${holes[only].name}</button>`
+      : '<button class="btn primary" data-act="map">Choose the next island</button>';
   setTimeout(() => {
     if (game.mode !== 'done') return;
     showCard(`
       <h2>${note || scoreWord(score, hole.par)}</h2>
       <p class="sub">${game.onBonus ? 'Bonus island' : `Hole ${game.stage + 1}`} &middot; ${hole.name} &middot; ${score} stroke${score === 1 ? '' : 's'}</p>
       ${scorecardHtml()}
-      <div class="buttons">
-        <button class="btn primary" data-act="${last ? 'final' : 'map'}">${last ? 'See your score' : 'Choose the next island'}</button>
-      </div>`);
+      <div class="buttons">${nextButton}</div>`);
   }, score === 1 ? 1600 : 1000);
 }
 
