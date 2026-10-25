@@ -88,7 +88,7 @@ function onPhysicsEvent(ev) {
       toast('Splash! +1 stroke');
     } else {
       sfx.fall();
-      toast('Down the gap! +1 stroke');
+      toast(ev.off ? 'Over the side! +1 stroke' : 'Down the gap! +1 stroke');
     }
     game.strokes++;
     updateHud();

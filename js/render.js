@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { insidePolygon, zoneContains, smooth } from './terrain.js';
-import { BALL_R, CUP_R, PIPE_R, WALL_HALF, spinnerAngle, moverState, windmillAngle } from './physics.js';
+import { BALL_R, CUP_R, PIPE_R, WALL_HALF, spinnerAngle, moverState, windmillAngle, openBands, clipToBands } from './physics.js';
 import { THEMES, CRYSTAL_COLORS, rng, lambert, makeTree, makeDrift, skyTexture } from './themes.js';
 
 // Draws a hole and everything on it. Nothing in here affects the game:
@@ -69,7 +69,9 @@ function noise2(seed) {
 
 // The island under a hole: everything within a wobbly distance of the
 // fairway, so its edge has bays and headlands instead of straight sides.
-function makeIsland(shape, b, seed) {
+// `open`: bands of z ({ z1, z2 }) where the island is cut right through,
+// with sky below (rope bridges and split gaps).
+function makeIsland(shape, b, seed, open = []) {
   const bump = noise2(seed);
   const reach = (x, z) => ISLAND_MIN + ISLAND_VARY * bump(x * 0.33, z * 0.33);
   const pad = ISLAND_MIN + ISLAND_VARY + 0.2;
@@ -86,6 +88,8 @@ function makeIsland(shape, b, seed) {
   const island = {
     x0: b.x0 - pad, x1: b.x1 + pad, z0: b.z0 - pad, z1: b.z1 + pad,
     inside(x, z, inset = 0) {
+      const pad = Math.max(0, inset);
+      if (open.some(o => z > o.z1 - pad && z < o.z2 + pad)) return false;
       if (insidePolygon(shape, x, z)) return true;
       return fairwayDist(x, z) + inset <= reach(x, z);
     },
@@ -309,7 +313,8 @@ export class World {
     this.applySky(theme);
     const g = this.holeGroup = new THREE.Group();
     const b = this.bounds = bounds(hole.shape);
-    const island = this.island = makeIsland(hole.shape, b, 11 + index * 7);
+    this.open = openBands(hole);
+    const island = this.island = makeIsland(hole.shape, b, 11 + index * 7, this.open);
 
     this.buildGround(g, hole, terrain, island);
     this.buildUnderside(g, terrain, island);
@@ -321,6 +326,7 @@ export class World {
     this.buildCup(g, hole, terrain);
     this.buildObstacles(g, hole, terrain);
     this.buildGaps(g, hole, terrain);
+    this.buildRopeBridges(g, hole, terrain);
     this.buildWindmills(g, hole, terrain);
     this.buildBumpers(g, hole, terrain);
     this.buildPipes(g, hole, terrain);
@@ -404,8 +410,12 @@ export class World {
     const zoneColor = { sand: COLORS.sand, ice: COLORS.ice, water: COLORS.pondBed };
     // Holes cut in the fairway: the cup and warp pipe mouths, and gaps.
     const cuts = [[cx, cz, CUP_R], ...(hole.pipes || []).map(p => [p.from[0], p.from[1], PIPE_R])];
-    const gaps = hole.gaps || [];
+    // Gaps, and rope bridges (drawn as planks instead of grass).
+    const gaps = [...(hole.gaps || []), ...(hole.ropeBridges || [])];
     const inCut = (x, z) => cuts.some(([ux, uz, r]) => Math.hypot(x - ux, z - uz) < r) || gaps.some(gp => z > gp.z1 && z < gp.z2);
+    // Where the island is cut right through, and the nearer edge of that cut.
+    const openAt = z => this.open.find(o => z > o.z1 && z < o.z2);
+    const openEdge = (o, z) => (z - o.z1 < o.z2 - z ? o.z1 : o.z2);
 
     const inIsl = new Uint8Array(nx * nz);
     for (let j = 0; j < nz; j++) {
@@ -417,7 +427,8 @@ export class World {
     for (let j = 0; j < nz; j++) {
       for (let i = 0; i < nx; i++) {
         const k = j * nx + i;
-        inIsl[k] = inPoly[k] || island.inside(x0 + i * GRID, z0 + j * GRID) ? 1 : 0;
+        const z = z0 + j * GRID;
+        inIsl[k] = !openAt(z) && (inPoly[k] || island.inside(x0 + i * GRID, z)) ? 1 : 0;
       }
     }
     // Next to the island's edge (and so worth snapping onto it).
@@ -492,8 +503,18 @@ export class World {
           fairCol[k * 3 + 2] = col.b;
         }
 
-        // Rough vertex
-        if ((!inside || edge) && (inIsl[k] || nearShore(i, j))) {
+        // Where the island is cut through, the edge of the cut is a straight
+        // line across: these points (rough, and the underside's rim) sit on it.
+        const open = openAt(z);
+        if (open) {
+          const ez = openEdge(open, z);
+          roughPos[k * 3] = x;
+          roughPos[k * 3 + 1] = terrain.height(x, ez) - ROUGH_DROP;
+          roughPos[k * 3 + 2] = ez;
+          col.copy(pal.rough).lerp(pal.roughDark, rand() * 0.6);
+          roughCol.set([col.r, col.g, col.b], k * 3);
+        } else if ((!inside || edge) && (inIsl[k] || nearShore(i, j))) {
+          // Rough vertex
           let rx = x, rz = z;
           if (inside) [rx, rz] = nearestOnPolygon(hole.shape, x, z).point;
           else if (!inIsl[k]) [rx, rz] = island.snap(x, z);
@@ -668,9 +689,16 @@ export class World {
         const key = `${Math.round(x / spacing)},${Math.round(z / spacing)}`;
         if (taken.has(key)) continue;
         taken.set(key, true);
+        const y = this.terrain.height(x, z) - ROUGH_DROP;
+        // Along a cut through the island, the edge faces straight across it.
+        const open = this.open.find(o => Math.abs(z - o.z1) < 1e-6 || Math.abs(z - o.z2) < 1e-6);
+        if (open) {
+          pts.push({ x, z, nx: 0, nz: Math.abs(z - open.z1) < 1e-6 ? 1 : -1, y });
+          continue;
+        }
         const [qx, qz] = nearestOnPolygon(this.hole.shape, x, z).point;
         const l = Math.hypot(x - qx, z - qz) || 1;
-        pts.push({ x, z, nx: (x - qx) / l, nz: (z - qz) / l, y: this.terrain.height(x, z) - ROUGH_DROP });
+        pts.push({ x, z, nx: (x - qx) / l, nz: (z - qz) / l, y });
       }
     }
     return pts;
@@ -1136,7 +1164,17 @@ export class World {
   buildRails(g, hole, terrain) {
     const segs = [];
     const pts = hole.shape;
-    for (let i = 0; i < pts.length; i++) segs.push([...pts[i], ...pts[(i + 1) % pts.length]]);
+    // No rails where there's open sky beside the fairway, just a post at
+    // each end of the open stretch.
+    const ends = [];
+    for (let i = 0; i < pts.length; i++) {
+      for (const s of clipToBands([...pts[i], ...pts[(i + 1) % pts.length]], this.open)) {
+        segs.push(s);
+        for (const [x, z] of [[s[0], s[1]], [s[2], s[3]]]) {
+          if (this.open.some(o => Math.abs(z - o.z1) < 1e-6 || Math.abs(z - o.z2) < 1e-6)) ends.push([x, z]);
+        }
+      }
+    }
     for (const w of hole.walls || []) segs.push(w);
     if (this.theme.cloudy) return this.buildCushions(g, segs, terrain);
 
@@ -1183,8 +1221,11 @@ export class World {
 
     // Around the outline: a post every ~1.5 m of rail and at sharp corners.
     let run = 0;
+    posts.push(...ends);
+    const open = z => this.open.some(o => z > o.z1 && z < o.z2);
     for (let i = 0; i < pts.length; i++) {
       const [ax, az] = pts[(i + pts.length - 1) % pts.length], [px, pz] = pts[i], [bx, bz] = pts[(i + 1) % pts.length];
+      if (open(pz)) continue;
       const turn = Math.abs(Math.atan2((px - ax) * (bz - pz) - (pz - az) * (bx - px), (px - ax) * (bx - px) + (pz - az) * (bz - pz)));
       if (turn > 0.6 || run > 1.5 || i === 0) {
         posts.push([px, pz]);
@@ -1350,13 +1391,17 @@ export class World {
       const w = x1 - x0, mid = (x0 + x1) / 2, depth = 1.6;
       for (const z of [gp.z1, gp.z2]) {
         const y = terrain.height(mid, z);
-        const face = new THREE.Mesh(new THREE.PlaneGeometry(w, depth), dark);
-        face.position.set(mid, y - depth / 2, z);
-        g.add(face);
+        if (!gp.split) {
+          const face = new THREE.Mesh(new THREE.PlaneGeometry(w, depth), dark);
+          face.position.set(mid, y - depth / 2, z);
+          g.add(face);
+        }
         const stripe = new THREE.Mesh(new THREE.BoxGeometry(w - 0.1, 0.02, 0.08), lambert('#ffd23f'));
         stripe.position.set(mid, y + 0.005, z + (z === gp.z1 ? -0.04 : 0.04));
         g.add(stripe);
       }
+      // A split gap opens onto the sky: nothing more to draw.
+      if (gp.split) continue;
       const yb = Math.min(terrain.height(mid, gp.z1), terrain.height(mid, gp.z2)) - depth;
       const len = gp.z2 - gp.z1;
       for (const x of [x0, x1]) {
@@ -1369,6 +1414,66 @@ export class World {
       floor.rotation.x = -Math.PI / 2;
       floor.position.set(mid, yb, (gp.z1 + gp.z2) / 2);
       g.add(floor);
+    }
+  }
+
+  // A plank bridge you putt along: the deck follows the ground (so it sags
+  // as the hole says), on two ropes, with rope handrails too high to stop a
+  // ball rolling off the side.
+  buildRopeBridges(g, hole, terrain) {
+    const rand = rng(23);
+    const plankMat = lambert('#9b7048', { flatShading: true });
+    const ropeMat = lambert('#d9c8a0');
+    const postMat = lambert('#6b4a2c');
+    const rope = (pts, r = 0.018) => {
+      const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, r, 5), ropeMat);
+      m.castShadow = true;
+      g.add(m);
+    };
+    for (const br of hole.ropeBridges || []) {
+      const len = br.z2 - br.z1;
+      const n = Math.round(len / 0.2);
+      const span = z => spanAt(hole.shape, z);
+      for (let i = 0; i < n; i++) {
+        const z = br.z1 + (i + 0.5) * (len / n);
+        const [x0, x1] = span(z);
+        const mid = (x0 + x1) / 2;
+        const plank = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 + 0.12, 0.05, (len / n) * 0.86), plankMat);
+        plank.position.set(mid + (rand() - 0.5) * 0.03, terrain.height(mid, z) - 0.025, z);
+        plank.rotation.set(-Math.atan(terrain.grad(mid, z)[1]), (rand() - 0.5) * 0.04, 0);
+        plank.castShadow = true;
+        plank.receiveShadow = true;
+        g.add(plank);
+      }
+      for (const side of [-1, 1]) {
+        const edgeX = z => {
+          const [x0, x1] = span(Math.min(br.z2 - 1e-3, Math.max(br.z1 + 1e-3, z)));
+          return side < 0 ? x0 - 0.08 : x1 + 0.08;
+        };
+        // Under the plank ends, and a handrail that sags a little more.
+        const under = [], rail = [];
+        for (let i = 0; i <= 24; i++) {
+          const t = i / 24, z = br.z1 - 0.15 + (len + 0.3) * t;
+          const x = edgeX(z), y = terrain.height(x, z);
+          under.push(new THREE.Vector3(x, y - 0.06, z));
+          rail.push(new THREE.Vector3(x, y + 0.55 - 0.12 * 4 * t * (1 - t), z));
+        }
+        rope(under, 0.022);
+        rope(rail);
+        for (let i = 2; i < 24; i += 2) {
+          const top = rail[i], low = under[i];
+          const hanger = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, top.y - low.y, 4), ropeMat);
+          hanger.position.set(top.x, (top.y + low.y) / 2, top.z);
+          g.add(hanger);
+        }
+        for (const z of [br.z1 - 0.15, br.z2 + 0.15]) {
+          const x = edgeX(z), y = terrain.height(x, z);
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.8, 6), postMat);
+          post.position.set(x, y + 0.25, z);
+          post.castShadow = true;
+          g.add(post);
+        }
+      }
     }
   }
 
