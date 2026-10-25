@@ -26,6 +26,17 @@ try {
 }
 const holes = COURSE.holes;
 const STAGES = MAP.stages.length;
+const ROUND_KEY = 'minigolf2-round';
+
+// If the phone drops the 3D view (it can under memory pressure), say so and
+// offer a reload; the round is saved, so it carries on from this island.
+canvas.addEventListener('webglcontextlost', e => {
+  e.preventDefault();
+  document.getElementById('card').innerHTML = `<h2>The graphics stopped</h2>
+    <p>Your phone ran short of memory for the 3D view. Your round is saved: reload and you'll carry on from this island.</p>
+    <div class="buttons"><button class="btn primary" onclick="location.reload()">Reload</button></div>`;
+  document.getElementById('overlay').classList.add('show');
+});
 
 const game = {
   mode: 'title',        // title | aim | rolling | splash | done | travel | final
@@ -375,6 +386,51 @@ function enterHole(hole) {
   });
 }
 
+// ---- Saving the round in progress -------------------------------------------------
+
+// Where you are in the round, so a reload can pick it up again.
+function saveRound() {
+  if (game.mode === 'title') return;
+  try {
+    sessionStorage.setItem(ROUND_KEY, JSON.stringify({
+      hole: game.holeIndex, stage: game.stage, onBonus: game.onBonus, bonusPlayed: game.bonusPlayed,
+      route: game.route.filter(r => r.score != null),
+    }));
+  } catch {
+    // Storage blocked: a reload just starts a new round.
+  }
+}
+
+function savedRound() {
+  try {
+    const r = JSON.parse(sessionStorage.getItem(ROUND_KEY));
+    if (!r || !holes[r.hole] || !Array.isArray(r.route)) return null;
+    if (!r.route.every(q => holes[q.hole] && Number.isFinite(q.score))) return null;
+    return r;
+  } catch {
+    return null;
+  }
+}
+
+function clearRound() {
+  try {
+    sessionStorage.removeItem(ROUND_KEY);
+  } catch {
+    // Nothing to clear.
+  }
+}
+
+function resumeRound() {
+  const r = savedRound();
+  if (!r) return startRound();
+  game.route = r.route;
+  game.stage = r.stage;
+  game.onBonus = r.onBonus;
+  game.bonusPlayed = r.bonusPlayed;
+  hideCard();
+  enterHole(r.hole);
+}
+
 // ---- Saving the best round -----------------------------------------------------------
 
 function bestText(data) {
@@ -423,12 +479,14 @@ function showTitle() {
   world.cam.overview = true;
   world.showMarker = false;
   const best = bestText(load());
+  const resume = savedRound();
   showCard(`
     <h1>Mini Golf <span class="two">2</span></h1>
     <p class="sub">${COURSE.name} &middot; ${holes.length} islands &middot; ${STAGES} holes a round</p>
     ${best ? `<p>${best}</p>` : ''}
     <div class="buttons">
-      <button class="btn primary" data-act="play">Play</button>
+      ${resume ? `<button class="btn primary" data-act="resume-round">Continue round (${resume.onBonus ? 'bonus island' : `hole ${resume.stage + 1}`}: ${holes[resume.hole].name})</button>` : ''}
+      <button class="btn ${resume ? '' : 'primary'}" data-act="play">${resume ? 'New round' : 'Play'}</button>
       <button class="btn" data-act="sound">Sound: ${soundOn ? 'on' : 'off'}</button>
     </div>
     <ul class="how">
@@ -439,6 +497,7 @@ function showTitle() {
 }
 
 function startRound() {
+  clearRound();
   game.route = [];
   game.stage = 0;
   game.onBonus = false;
@@ -458,6 +517,7 @@ function startHole(i, { quiet = false, keepStrokes = false } = {}) {
   game.aim = { angle: 0, power: 0, keyboard: false };
   if (!keepStrokes && !game.route.some(r => r.hole === i)) game.route.push({ hole: i, stage: game.stage, bonus: !!game.onBonus, score: null });
   game.links = nextChoices();
+  saveRound();
   world.buildHole(hole, game.terrain, i, { outs: game.links.map(l => l.kind) });
 
   const look = hole.look || hole.cup;
@@ -506,6 +566,7 @@ function finishHole(score, note = '') {
 
 function showFinal() {
   game.mode = 'final';
+  clearRound();
   setPlaying(false);
   const t = totals();
   const data = load();
@@ -555,6 +616,7 @@ $('card').addEventListener('click', e => {
   ac();
   const act = btn.dataset.act;
   if (act === 'play') startRound();
+  else if (act === 'resume-round') resumeRound();
   else if (act === 'map') showMap();
   else if (act === 'map-browse') showMap({ browse: true });
   else if (act === 'menu') { game.paused = false; showMenu(); }

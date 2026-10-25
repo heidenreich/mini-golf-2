@@ -284,9 +284,15 @@ export class World {
   buildHole(hole, terrain, index, links = { outs: [] }) {
     if (this.holeGroup) {
       this.scene.remove(this.holeGroup);
+      // Free everything the old island used, textures included; phones
+      // run out of graphics memory a few islands in otherwise.
       this.holeGroup.traverse(o => {
         if (o.geometry) o.geometry.dispose();
-        if (o.material && o.material.dispose) o.material.dispose();
+        const m = o.material;
+        if (m && m.dispose) {
+          for (const key of ['map', 'alphaMap', 'emissiveMap']) if (m[key]) m[key].dispose();
+          m.dispose();
+        }
       });
     }
     for (const p of this.particles) {
