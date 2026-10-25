@@ -597,6 +597,8 @@ function showAim() {
   const { angle, power } = game.aim;
   const cancelling = drag && drag.pull < CANCEL_PULL;
   $('power').classList.toggle('cancel', !!cancelling);
+  // The power bar takes the hole name's place while you aim.
+  document.body.classList.toggle('aiming', !!cancelling || power > 0);
   if (cancelling) {
     world.hideAim();
     $('power').hidden = false;

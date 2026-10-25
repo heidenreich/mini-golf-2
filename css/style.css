@@ -81,6 +81,7 @@ button.chip[aria-pressed="true"] { background: var(--ink); color: #fff; }
 #hud .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 #hud button { pointer-events: auto; }
 #hud-name { margin-top: 6px; font-weight: 600; }
+body.aiming #hud-name { visibility: hidden; }
 #hud-total-chip.under b { color: var(--good); }
 #hud-total-chip.over b { color: var(--accent-ink); }
 
@@ -92,10 +93,12 @@ button.chip[aria-pressed="true"] { background: var(--ink); color: #fff; }
   gap: 10px;
 }
 
+/* At the top, under the score chips: pulling back from the ball takes your
+   finger down the screen, so anything lower would be under it. */
 #power {
   position: fixed;
   left: 50%;
-  bottom: calc(72px + var(--safe-bottom));
+  top: calc(104px + var(--safe-top));
   width: min(260px, 60vw);
   height: 22px;
   transform: translateX(-50%);
@@ -207,6 +210,7 @@ button.chip[aria-pressed="true"] { background: var(--ink); color: #fff; }
   #hud .row { gap: 4px; }
   .chip { height: 34px; padding: 0 8px; font-size: 13.5px; }
   #hud-name { display: none; }   /* the hole's name is in the banner and the menu */
+  #power { top: calc(58px + var(--safe-top)); }
   #toast { top: calc(56px + var(--safe-top)); }
   #hint { max-width: none; right: 10px; bottom: calc(68px + var(--safe-bottom)); }
 }
@@ -218,7 +222,7 @@ button.chip[aria-pressed="true"] { background: var(--ink); color: #fff; }
   #hud { right: auto; }
   #hud .row { flex-direction: column; align-items: flex-start; }
   #hud-name { margin-top: 6px; }
-  #power { bottom: calc(18px + var(--safe-bottom)); width: min(240px, 34vw); }
+  #power { top: calc(12px + var(--safe-top)); width: min(240px, 34vw); }
   #hud-name { display: none; }
   #toast { top: calc(232px + var(--safe-top)); max-width: 260px; font-size: 14px; padding: 8px 12px; }
   #toast small { font-size: 13px; }
