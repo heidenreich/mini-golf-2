@@ -25,7 +25,8 @@
 //             `from`, pop out at `to` heading along dir (radians, 0 = +z)
 //   tip       shown when the hole starts
 //   surface   the fairway's surface where no zone says otherwise (default grass)
-//   theme     'winter' for snow, frost and falling snowflakes
+//   theme     the island's look (see themes.js): meadow, desert, autumn, pond,
+//             tulips, volcano, beach, winter or night
 
 export const COURSE = {
   id: 'sky',
@@ -33,6 +34,7 @@ export const COURSE = {
   holes: [
     {
       name: 'Welcome Hill',
+      theme: 'meadow',
       par: 2,
       tip: 'Drag back from the ball and let go to putt. Drag anywhere else to look round.',
       shape: [[-1.5, -1], [1.5, -1], [1.5, 13], [-1.5, 13]],
@@ -44,6 +46,7 @@ export const COURSE = {
     },
     {
       name: 'The Gap',
+      theme: 'desert',
       par: 2,
       tip: 'Up the kicker and over the gap. Too soft and it drops in.',
       shape: [[-1.5, -1], [1.5, -1], [1.5, 13], [-1.5, 13]],
@@ -58,6 +61,7 @@ export const COURSE = {
     },
     {
       name: 'Dogleg Bowl',
+      theme: 'autumn',
       par: 3,
       tip: 'The bowl in the corner gathers the ball. Drag the view round to see past the bend.',
       shape: [[-1.5, -1], [1.5, -1], [1.5, 8], [12, 8], [12, 11.5], [0, 11.5], [-1.5, 10]],
@@ -72,6 +76,7 @@ export const COURSE = {
     },
     {
       name: 'Duck Pond',
+      theme: 'pond',
       par: 3,
       tip: 'Water costs a stroke and puts you back. Bumpers behind the cup kick an overhit back.',
       shape: [[-2.5, -1], [2.5, -1], [2.5, 14], [-2.5, 14]],
@@ -92,6 +97,7 @@ export const COURSE = {
     },
     {
       name: 'Windmill',
+      theme: 'tulips',
       par: 3,
       tip: 'Time it through the door between the sails, or go round the side.',
       shape: [[-1.6, -1], [1.6, -1], [1.6, 13], [-1.6, 13]],
@@ -108,6 +114,7 @@ export const COURSE = {
     },
     {
       name: 'Volcano',
+      theme: 'volcano',
       par: 3,
       tip: 'The cup sits in the crater. Hit it hard enough to climb the slope.',
       shape: [[-3, -1], [3, -1], [3, 12], [-3, 12]],
@@ -120,6 +127,7 @@ export const COURSE = {
     },
     {
       name: 'Switchback',
+      theme: 'beach',
       par: 4,
       tip: 'Downhill, round two corners, then a little rise to the cup.',
       shape: [[-1.5, -1], [1.5, -1], [1.5, 5], [8, 5], [8, 14], [5, 14], [5, 8.2], [-1.5, 8.2]],
@@ -156,6 +164,7 @@ export const COURSE = {
     },
     {
       name: 'Warp Finale',
+      theme: 'night',
       par: 3,
       tip: 'Slip past the sliding blocks, or find the warp pipe on the right.',
       shape: [[-2, -1], [2, -1], [2, 18], [-2, 18]],

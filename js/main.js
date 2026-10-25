@@ -143,6 +143,10 @@ const sfx = {
   ice(speed) {
     noise(0.28, { vol: Math.min(0.08, 0.02 + speed * 0.012), freq: 6000, q: 0.7, type: 'highpass' });
   },
+  firework() {
+    noise(0.35, { vol: 0.12, freq: 900, q: 0.5, type: 'lowpass' });
+    tone(1600 + Math.random() * 800, 0.25, { vol: 0.05, type: 'triangle', slide: 0.5 });
+  },
   fall() {
     tone(500, 0.6, { vol: 0.14, type: 'triangle', slide: 0.25 });
   },
@@ -460,6 +464,7 @@ function onPhysicsEvent(ev) {
     sfx.cup();
     const hole = holes[game.holeIndex];
     if (game.strokes <= hole.par) world.confetti(...hole.cup);
+    if (hole.theme === 'night') world.fireworks(...hole.cup);
     finishHole(game.strokes);
   } else if (ev.type === 'water' || ev.type === 'fall') {
     // Same penalty for both: +1 stroke, back to where you played from.
@@ -483,6 +488,8 @@ function onPhysicsEvent(ev) {
     toast('Out of bounds: back you go');
   }
 }
+
+world.onFirework = () => sfx.firework();
 
 let lastHitSound = 0;
 function onHit(speed, x, z, what) {

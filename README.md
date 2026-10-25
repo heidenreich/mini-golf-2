@@ -10,17 +10,19 @@ No build step. The only dependency is [three.js](https://threejs.org/) r160, ven
 
 **Sky Islands** (9 holes, par 26)
 
-| # | Hole | Par | What's on it |
-|---|------|-----|--------------|
-| 1 | Welcome Hill | 2 | A gentle hump down the middle |
-| 2 | The Gap | 2 | Up a kicker and over a chasm. Too soft and the ball drops in (+1 stroke) |
-| 3 | Dogleg Bowl | 3 | A left-hand dogleg with a bowl in the corner that gathers the ball, then downhill to the cup |
-| 4 | Duck Pond | 3 | A pond in the middle of the fairway (+1 stroke, ball returns), a hump on the safe side, a bunker by the cup and pinball bumpers behind it |
-| 5 | Windmill | 3 | Through the door between the turning sails, or the long way round either side |
-| 6 | Volcano | 3 | The cup sits in a crater on top of a hill. Too soft rolls back, too hard flies over the far rim |
-| 7 | Switchback | 4 | Downhill round two corners, past a bunker, over a small ridge |
-| 8 | Frozen Island | 3 | A snowy island where the whole fairway is frozen, so everything slides further. Two open-water ponds with an even slicker ice bridge between them, or a narrow path past them along either rail |
-| 9 | Warp Finale | 3 | Two sliding blocks, or a warp pipe on the right that shoots you up the ramp into the bowl round the cup |
+Each hole sits on its own themed island.
+
+| # | Hole | Par | Island | What's on it |
+|---|------|-----|--------|--------------|
+| 1 | Welcome Hill | 2 | **Spring meadow**: flowers and butterflies | A gentle hump down the middle |
+| 2 | The Gap | 2 | **Desert canyon**: red rock, cacti and mesas | Up a kicker and over a chasm. Too soft and the ball drops in (+1 stroke) |
+| 3 | Dogleg Bowl | 3 | **Autumn forest**: orange and red trees, falling leaves | A left-hand dogleg with a bowl in the corner that gathers the ball, then downhill to the cup |
+| 4 | Duck Pond | 3 | **Lily pond**: lily pads, reeds and ducks paddling round | A pond in the middle of the fairway (+1 stroke, ball returns), a hump on the safe side, a bunker by the cup and pinball bumpers behind it |
+| 5 | Windmill | 3 | **Tulip fields**: stripes of tulips | Through the door between the turning sails, or the long way round either side |
+| 6 | Volcano | 3 | **Volcanic island**: black rock, glowing lava cracks, rising embers | The cup sits in a crater on top of a hill. Too soft rolls back, too hard flies over the far rim |
+| 7 | Switchback | 4 | **Tropical beach**: sand, palms and beach umbrellas | Downhill round two corners, past a bunker, over a small ridge |
+| 8 | Frozen Island | 3 | **Winter**: snow, snowy pines, falling snowflakes | A snowy island where the whole fairway is frozen, so everything slides further. Two open-water ponds with an even slicker ice bridge between them, or a narrow path past them along either rail |
+| 9 | Warp Finale | 3 | **Night**: stars, fireflies, glowing rails, fireworks when you hole out | Two sliding blocks, or a warp pipe on the right that shoots you up the ramp into the bowl round the cup |
 
 Your best round is saved in your browser.
 
@@ -52,6 +54,7 @@ python3 -m http.server
 | `js/terrain.js` | The ground: height and slope anywhere on a hole, built from ramps, hills, ridges and tilts |
 | `js/physics.js` | Tuning constants and the ball simulation: slopes, friction, rails, sliding blocks, gaps, windmills, bumpers, warp pipes, the cup |
 | `js/render.js` | Everything you see, built with three.js: ground, rails, island, water, cup and flag, obstacles, scenery, aim guide, effects, camera |
+| `js/themes.js` | Each island's look: ground and sky colours, lights, trees and other scenery, particles in the air, and signature pieces (ducks, tulip fields, lava, stars) |
 | `js/main.js` | Game state, input, sound, screens, saving and the main loop |
 | `css/style.css` | HUD, menus and cards |
 
