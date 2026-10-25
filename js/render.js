@@ -192,7 +192,8 @@ export class World {
   constructor(canvas) {
     const lowPower = Math.min(screen.width, screen.height) < 500;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowPower ? 2 : 1.75));
+    // Phones' 3x screens cost far more than they show on a small, moving picture.
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowPower ? 1.5 : 1.75));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 

@@ -27,6 +27,7 @@ try {
 const holes = COURSE.holes;
 const STAGES = MAP.stages.length;
 const ROUND_KEY = 'minigolf2-round';
+const ROUND_TTL = 7 * 24 * 3600 * 1000;  // a round left this long starts afresh
 
 // If the phone drops the 3D view (it can under memory pressure), say so and
 // offer a reload; the round is saved, so it carries on from this island.
@@ -444,13 +445,16 @@ function enterHole(hole) {
 
 // ---- Saving the round in progress -------------------------------------------------
 
-// Where you are in the round, so a reload can pick it up again.
+// Where you are in the round, so a reload can pick it up again. It goes in
+// localStorage rather than sessionStorage: phones close installed apps in the
+// background, and that throws sessionStorage away.
 function saveRound() {
   if (game.mode === 'title') return;
   try {
-    sessionStorage.setItem(ROUND_KEY, JSON.stringify({
+    localStorage.setItem(ROUND_KEY, JSON.stringify({
       hole: game.holeIndex, stage: game.stage, onBonus: game.onBonus, bonusPlayed: game.bonusPlayed,
       route: game.route.filter(r => r.score != null),
+      at: Date.now(),
     }));
   } catch {
     // Storage blocked: a reload just starts a new round.
@@ -459,8 +463,9 @@ function saveRound() {
 
 function savedRound() {
   try {
-    const r = JSON.parse(sessionStorage.getItem(ROUND_KEY));
+    const r = JSON.parse(localStorage.getItem(ROUND_KEY));
     if (!r || !holes[r.hole] || !Array.isArray(r.route)) return null;
+    if (!Number.isFinite(r.at) || Date.now() - r.at > ROUND_TTL) return null;
     if (!r.route.every(q => holes[q.hole] && Number.isFinite(q.score))) return null;
     return r;
   } catch {
@@ -470,7 +475,7 @@ function savedRound() {
 
 function clearRound() {
   try {
-    sessionStorage.removeItem(ROUND_KEY);
+    localStorage.removeItem(ROUND_KEY);
   } catch {
     // Nothing to clear.
   }
@@ -965,6 +970,7 @@ function showAim() {
 const pointers = new Map();
 let drag = null;     // one finger / left mouse: aiming a putt
 let orbit = null;    // two fingers / right mouse: moving the camera
+let aimDirty = false; // the aim changed; redrawn once per frame, not per pointer move
 
 function fullPull() {
   return Math.max(130, Math.min(170, Math.min(innerWidth, innerHeight) * 0.33));
@@ -1065,7 +1071,7 @@ canvas.addEventListener('pointermove', e => {
       game.aim.power = Math.min(1, pull / fullPull());
       game.aim.angle = world.dragToAngle(dx, dy);
     }
-    showAim();
+    aimDirty = true;
   }
 });
 
@@ -1224,12 +1230,13 @@ function resize() {
   if (portrait !== wasPortrait && !world.cam.overview) Object.assign(world.cam.want, world.defaultView());
   wasPortrait = portrait;
 }
-window.addEventListener('resize', resize);
+window.addEventListener('resize', () => { resize(); stillFor = 0; });
 resize();
 
 let last = performance.now();
 let acc = 0;
 let aimTick = 0;
+let stillFor = 0;  // seconds paused; once the camera has settled, stop redrawing
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
@@ -1246,10 +1253,18 @@ function frame(now) {
   // Keep the aim dots in step with moving obstacles (a few times a second
   // is enough, and saves phones a lot of work).
   aimTick = (aimTick + 1) % 4;
-  if (aimTick === 0 && game.mode === 'aim' && game.aim.power > 0 && (game.sim.hole.spinners || game.sim.hole.movers)) showAim();
-  world.update(game.paused ? 0 : dt, game.sim, ballPos, ballVel);
-  world.updateCamera(dt, ballPos);
-  world.render();
+  if (aimDirty || (aimTick === 0 && game.mode === 'aim' && game.aim.power > 0 && (game.sim.hole.spinners || game.sim.hole.movers))) {
+    aimDirty = false;
+    showAim();
+  }
+  // Nothing moves while paused, so after a moment for the camera to settle
+  // the picture stays as it is: saves battery behind the pause menu.
+  stillFor = game.paused ? stillFor + dt : 0;
+  if (stillFor < 0.6) {
+    world.update(game.paused ? 0 : dt, game.sim, ballPos, ballVel);
+    world.updateCamera(dt, ballPos);
+    world.render();
+  }
   updateGrabRing();
   if (game.mode === 'choose') placePathLabels();
   requestAnimationFrame(frame);
