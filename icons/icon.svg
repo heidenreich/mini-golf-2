@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5fb3ec"/>
+      <stop offset="1" stop-color="#b9e2fa"/>
+    </linearGradient>
+    <linearGradient id="grass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7fd65a"/>
+      <stop offset="1" stop-color="#4fae3c"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#sky)"/>
+  <ellipse cx="150" cy="150" rx="46" ry="18" fill="#fff" opacity="0.8"/>
+  <ellipse cx="380" cy="118" rx="36" ry="14" fill="#fff" opacity="0.7"/>
+  <!-- island underside -->
+  <path d="M110 300 Q130 360 190 392 L240 436 L262 398 Q330 380 372 340 Q398 318 402 300 Z" fill="#8a5a3b"/>
+  <path d="M150 300 Q170 340 210 360 L236 392 L250 360 Q300 350 340 300 Z" fill="#a8714a"/>
+  <!-- island top -->
+  <ellipse cx="256" cy="298" rx="150" ry="46" fill="url(#grass)"/>
+  <!-- cup -->
+  <ellipse cx="318" cy="292" rx="20" ry="7" fill="#1f3550"/>
+  <!-- flag -->
+  <rect x="314" y="152" width="7" height="142" rx="3" fill="#f4f4f4"/>
+  <path d="M321 156 L392 180 L321 206 Z" fill="#ef476f"/>
+  <!-- ball -->
+  <circle cx="196" cy="282" r="24" fill="#fff"/>
+  <circle cx="190" cy="276" r="3" fill="#d6dde6"/>
+  <circle cx="202" cy="284" r="3" fill="#d6dde6"/>
+  <circle cx="192" cy="290" r="3" fill="#d6dde6"/>
+</svg>

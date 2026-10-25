@@ -6,6 +6,8 @@ No build step. The only dependency is [three.js](https://threejs.org/) r160, ven
 
 **Play:** https://heidenreich.github.io/mini-golf-2/
 
+**Install:** it's a PWA. On a phone, use *Add to Home Screen* (Safari's share menu, or Chrome's install prompt) and it opens full screen and plays offline. `sw.js` fetches the game's own files from the network first, so a new deploy shows up on the next load. three.js, the icons and the font are cached once and served from the cache after that. Bump `CACHE` in `sw.js` if you change the vendored three.js or the icons, or add a file to `SHELL` when you add a new script.
+
 ## Course
 
 **Sky Islands**: 13 floating islands linked by rope bridges. A round crosses nine of them. Each bridge has a signpost naming the island it leads to. Where a stage has two islands you choose: the camera looks out over the bridges, you tap the label over the one you want, and it flies you across. With only one way on, it flies you straight there. The pause menu shows the whole course map and your route.

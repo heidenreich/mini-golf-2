@@ -1258,6 +1258,11 @@ function frame(now) {
 showTitle();
 requestAnimationFrame(frame);
 
+// Installable and playable offline.
+if ('serviceWorker' in navigator) {
+  addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+
 // For debugging and automated tests.
 window.miniGolf2 = {
   game, world, holes,
