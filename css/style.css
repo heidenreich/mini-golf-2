@@ -240,4 +240,43 @@ body.aiming #hud-name { visibility: hidden; }
   .scorecard th, .scorecard td { padding: 2px; }
 }
 
+/* A white-out while crossing a bridge between islands. */
+#fade {
+  position: fixed;
+  inset: 0;
+  background: #f4f9ff;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s;
+}
+#fade.on { opacity: 1; }
+
+/* The course map. */
+.map { display: block; width: 100%; max-width: 360px; margin: 8px auto 0; overflow: visible; }
+.map .bridge { fill: none; stroke: #b49a72; stroke-width: 2.5; stroke-dasharray: 5 4; opacity: 0.55; }
+.map .bridge.taken { stroke: var(--ink); stroke-dasharray: none; opacity: 0.85; stroke-width: 3; }
+.map .bridge.gold { stroke: #e0a800; opacity: 0.6; }
+.map .bridge.gold.open { opacity: 1; stroke-width: 3.5; stroke-dasharray: 7 4; }
+.map .island .halo { fill: none; stroke: none; }
+.map .island .name { font-size: 10px; font-weight: 600; text-anchor: middle; fill: var(--ink); }
+.map .island .par { font-size: 9px; text-anchor: middle; fill: var(--ink); opacity: 0.75; }
+.map .island .score { font-size: 13px; font-weight: 700; text-anchor: middle; fill: #fff; paint-order: stroke; stroke: rgba(31, 53, 80, 0.7); stroke-width: 3px; }
+.map .island .lock { font-size: 12px; text-anchor: middle; }
+.map .island:not(.visited):not(.choice) { opacity: 0.55; }
+.map .island.locked { opacity: 0.45; }
+.map .island.here .halo { stroke: var(--ink); stroke-width: 2.5; }
+.map .island.choice { cursor: pointer; }
+.map .island.choice .halo { fill: rgba(255, 210, 63, 0.35); stroke: #e0a800; stroke-width: 3; animation: map-pulse 1.4s ease-in-out infinite; }
+.map .island.choice:focus { outline: none; }
+.map .island.choice:focus .halo { stroke: var(--ink); stroke-width: 4; }
+.map .island.under .score { fill: #b8ffd9; }
+.map .island.over .score { fill: #ffd1dc; }
+@keyframes map-pulse { 50% { fill: rgba(255, 210, 63, 0.1); } }
+@media (prefers-reduced-motion: reduce) { .map .island.choice .halo { animation: none; } }
+.card .legend { font-size: 13px; opacity: 0.8; margin-top: 6px; }
+.card .legend .key { display: inline-block; width: 18px; height: 0; border-top: 3px dashed #e0a800; vertical-align: middle; margin-right: 4px; }
+@media (max-height: 500px) and (orientation: landscape) {
+  .map { max-width: 230px; }
+}
+
 [hidden] { display: none !important; }

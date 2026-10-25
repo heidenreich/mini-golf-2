@@ -1,7 +1,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { insidePolygon, zoneContains, smooth } from './terrain.js';
 import { BALL_R, CUP_R, PIPE_R, WALL_HALF, spinnerAngle, moverState, windmillAngle } from './physics.js';
-import { THEMES, rng, lambert, makeTree, makeDrift, skyTexture } from './themes.js';
+import { THEMES, CRYSTAL_COLORS, rng, lambert, makeTree, makeDrift, skyTexture } from './themes.js';
 
 // Draws a hole and everything on it. Nothing in here affects the game:
 // physics and rules live in physics.js and main.js.
@@ -279,7 +279,9 @@ export class World {
 
   // ---- A hole ---------------------------------------------------------------
 
-  buildHole(hole, terrain, index) {
+  // links: { outs: ['next' | 'gold' | 'locked', ...] } the rope bridges
+  // leading on from this island (one comes in behind the tee as well).
+  buildHole(hole, terrain, index, links = { outs: [] }) {
     if (this.holeGroup) {
       this.scene.remove(this.holeGroup);
       this.holeGroup.traverse(o => {
@@ -305,6 +307,7 @@ export class World {
     this.buildGround(g, hole, terrain, island);
     this.buildUnderside(g, terrain, island);
     this.buildIslandDressing(g, hole, terrain, island, index);
+    this.buildBridges(g, hole, terrain, links);
     this.buildRails(g, hole, terrain);
     this.buildWater(g, hole, terrain);
     this.buildIce(g, hole, terrain);
@@ -613,11 +616,24 @@ export class World {
     geo.setAttribute('color', new THREE.BufferAttribute(colr, 3));
     geo.setIndex(idx);
     geo.computeVertexNormals();
-    g.add(new THREE.Mesh(geo, lambert('#ffffff', { vertexColors: true })));
+    const cloudy = this.theme.cloudy;
+    g.add(new THREE.Mesh(geo, lambert('#ffffff', cloudy ? { vertexColors: true, emissive: '#e8eef7', emissiveIntensity: 0.35 } : { vertexColors: true })));
 
-    // Rocky points hanging from the deeper parts.
+    // Rocky points hanging from the deeper parts (or, under a cloud, puffs).
     const rand = rng(17);
     const rockMat = lambert(pal.rock, { flatShading: true });
+    if (cloudy) {
+      const puffMat = lambert('#ffffff', { flatShading: true, emissive: '#eef4fb', emissiveIntensity: 0.4 });
+      for (let n = 0; n < 40; n++) {
+        const k = Math.floor(rand() * N);
+        if (!inIsl[k]) continue;
+        const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.4 + rand() * 0.6, 1), puffMat);
+        m.position.set(pos[k * 3], pos[k * 3 + 1] + 0.2, pos[k * 3 + 2]);
+        m.scale.y = 0.7;
+        g.add(m);
+      }
+      return;
+    }
     let tries = 0, made = 0;
     while (made < 14 && tries++ < 400) {
       const k = Math.floor(rand() * N);
@@ -672,7 +688,14 @@ export class World {
     for (const p of shore) {
       if (!edge || rand() < 0.45) continue;
       const x = p.x - p.nx * 0.06, z = p.z - p.nz * 0.06;
-      if (edge === 'icicles' || edge === 'lava') {
+      if (edge === 'crystals') {
+        const color = CRYSTAL_COLORS[Math.floor(rand() * CRYSTAL_COLORS.length)];
+        const len = 0.2 + rand() * 0.45;
+        const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.06, 0), new THREE.MeshBasicMaterial({ color }));
+        c.scale.y = len / 0.12;
+        c.position.set(x, p.y - 0.05 - len / 2, z);
+        g.add(c);
+      } else if (edge === 'icicles' || edge === 'lava') {
         const len = 0.15 + rand() * (edge === 'lava' ? 0.35 : 0.55);
         const c = new THREE.Mesh(new THREE.ConeGeometry(0.03 + rand() * 0.04, len, 5), edge === 'lava' ? lava : ice);
         c.rotation.x = Math.PI;
@@ -755,6 +778,188 @@ export class World {
     }
   }
 
+  // Rope bridges: one comes in behind the tee, and one heads off beyond the
+  // cup towards each island you can go to next. A golden one leads to the
+  // bonus island (with a padlock until a birdie opens it).
+  buildBridges(g, hole, terrain, links) {
+    this.bridgeIn = null;
+    this.bridgesOut = [];
+    const shore = this.shorePoints(0.3);
+    if (!shore.length) return;
+    const [tx, tz] = hole.tee, [cx, cz] = hole.cup;
+    const fl = Math.hypot(cx - tx, cz - tz) || 1;
+    const fx = (cx - tx) / fl, fz = (cz - tz) / fl;
+    // The shore point furthest out from (ox, oz) in direction (dx, dz).
+    const anchor = (ox, oz, dx, dz) => {
+      let best = null, score = -Infinity;
+      for (const p of shore) {
+        const sc = (p.x - ox) * dx + (p.z - oz) * dz + (p.nx * dx + p.nz * dz) * 0.5;
+        if (sc > score) { score = sc; best = p; }
+      }
+      return best;
+    };
+    const rot = (a) => [fx * Math.cos(a) + fz * Math.sin(a), -fx * Math.sin(a) + fz * Math.cos(a)];
+
+    const pin = anchor(tx, tz, -fx, -fz);
+    this.bridgeIn = this.makeBridge(g, pin, -fx, -fz, 'next');
+
+    const outs = links.outs || [];
+    const nexts = outs.filter(k => k === 'next').length;
+    let n = 0;
+    for (const kind of outs) {
+      let a = 0;
+      if (kind === 'next') a = nexts > 1 ? (n++ === 0 ? 0.5 : -0.5) : 0;
+      else a = 1.3;
+      const [dx, dz] = rot(a);
+      const p = anchor(cx, cz, dx, dz);
+      this.bridgesOut.push(this.makeBridge(g, p, dx, dz, kind));
+    }
+  }
+
+  // A sagging plank bridge from shore point p heading off (dx, dz) into the
+  // clouds. Returns the path along its deck, for the camera to follow.
+  makeBridge(g, p, dx, dz, kind) {
+    const L = 11, W = 0.62;
+    const gold = kind === 'gold' || kind === 'locked';
+    const y0 = p.y + 0.02;
+    const at = t => new THREE.Vector3(p.x + dx * L * t - dx * 0.15, y0 - 0.7 * 4 * t * (1 - t) - 0.6 * t, p.z + dz * L * t - dz * 0.15);
+    const yaw = Math.atan2(dx, dz);
+    const plankMat = gold
+      ? new THREE.MeshStandardMaterial({ color: kind === 'locked' ? '#a08a52' : '#e8b84a', emissive: '#ffcf4a', emissiveIntensity: kind === 'locked' ? 0.05 : 0.35, roughness: 0.5 })
+      : lambert('#9b7048', { flatShading: true });
+    const ropeMat = gold ? lambert('#ffd23f', { emissive: '#ffb703', emissiveIntensity: kind === 'locked' ? 0.1 : 0.5 }) : lambert('#d9c8a0');
+    const planks = Math.round(L / 0.2);
+    const plankGeo = new THREE.BoxGeometry(W, 0.035, 0.14);
+    for (let i = 0; i <= planks; i++) {
+      const t = i / planks;
+      const a = at(t), b = at(Math.min(1, t + 0.01));
+      const m = new THREE.Mesh(plankGeo, plankMat);
+      m.position.copy(a);
+      m.rotation.set(0, yaw, 0);
+      m.rotateX(-Math.atan2(b.y - a.y, Math.hypot(b.x - a.x, b.z - a.z)) + (Math.random() - 0.5) * 0.06);
+      m.castShadow = true;
+      g.add(m);
+    }
+    // Rope handrails, sagging a little more than the deck, with hangers.
+    const sx = dz * (W / 2 + 0.03), sz = -dx * (W / 2 + 0.03);
+    for (const side of [-1, 1]) {
+      const pts = [];
+      for (let i = 0; i <= 20; i++) {
+        const t = i / 20, a = at(t);
+        pts.push(new THREE.Vector3(a.x + sx * side, a.y + 0.48 - 0.15 * 4 * t * (1 - t), a.z + sz * side));
+      }
+      g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.018, 5), ropeMat));
+      for (let i = 1; i < 20; i += 2) {
+        const top = pts[i], t = i / 20, a = at(t);
+        const h = top.y - a.y;
+        const hanger = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, h, 4), ropeMat);
+        hanger.position.set(top.x, a.y + h / 2, top.z);
+        g.add(hanger);
+      }
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.62, 6), lambert(gold ? '#c9952a' : '#6b4a2c'));
+      post.position.set(p.x + sx * side - dx * 0.1, y0 + 0.2, p.z + sz * side - dz * 0.1);
+      post.castShadow = true;
+      g.add(post);
+    }
+    // The far end disappears into a bank of cloud.
+    const end = at(1);
+    const puffMat = lambert('#ffffff', { flatShading: true, emissive: '#eef4fb', emissiveIntensity: 0.4, transparent: true, opacity: 0.92 });
+    for (let k = 0; k < 4; k++) {
+      const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.6 + k * 0.15, 1), puffMat);
+      m.position.set(end.x + dz * (k - 1.5) * 0.5, end.y - 0.2 + (k % 2) * 0.3, end.z - dx * (k - 1.5) * 0.5);
+      m.scale.y = 0.6;
+      g.add(m);
+    }
+    if (kind === 'locked') {
+      // A padlock hangs across the entrance.
+      const lock = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.17, 0.08), new THREE.MeshStandardMaterial({ color: '#ffcf4a', metalness: 0.6, roughness: 0.3 }));
+      const shackle = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.018, 6, 14, Math.PI), lambert('#c9c9c9'));
+      shackle.position.y = 0.08;
+      lock.add(body, shackle);
+      lock.position.set(p.x + dx * 0.3, y0 + 0.42, p.z + dz * 0.3);
+      lock.rotation.y = yaw;
+      g.add(lock);
+      this.lastLock = lock;
+      this.floaters.push({ obj: lock, baseY: lock.position.y, amp: 0.03, rate: 2, phase: 0 });
+    }
+    const path = [];
+    for (let i = 0; i <= 24; i++) path.push(at(i / 24).add(new THREE.Vector3(0, 0.55, 0)));
+    return { path, kind, dx, dz, plankMat, ropeMat, lock: this.lastLock };
+  }
+
+  // A birdie opens the golden bridge: it lights up and the padlock pops off.
+  unlockGold() {
+    for (const b of this.bridgesOut || []) {
+      if (b.kind !== 'locked') continue;
+      b.kind = 'gold';
+      b.plankMat.color.set('#e8b84a');
+      b.plankMat.emissiveIntensity = 0.35;
+      b.ropeMat.emissiveIntensity = 0.5;
+      if (b.lock) {
+        const { x, y, z } = b.lock.position;
+        b.lock.parent.remove(b.lock);
+        this.floaters = this.floaters.filter(f => f.obj !== b.lock);
+        this.burst(x, y, z, { count: 40, colors: ['#ffd23f', '#ffffff', '#ffb703'], speed: 1.6, up: 2, life: 1.2, size: 0.05, gravity: 3 });
+      }
+    }
+  }
+
+  // ---- Travelling between islands ---------------------------------------------
+
+  // Flies the camera along `points` (eased) over `dur` seconds, looking ahead.
+  fly(points, dur, onDone) {
+    this.cinematic = { points, dur, t: 0, onDone };
+  }
+
+  // Off along the n-th bridge leading out of this island.
+  flyOut(n, onDone) {
+    const b = this.bridgesOut[n];
+    this.cinematicLandsAtBall = false;
+    if (!b) return onDone && onDone();
+    const pts = [this.camera.position.clone(), ...b.path];
+    this.fly(pts, 2.2, onDone);
+  }
+
+  // In along the bridge behind the tee, ending where the normal camera sits.
+  flyIn(onDone) {
+    const b = this.bridgeIn;
+    this.cinematicLandsAtBall = true;
+    if (!b) return onDone && onDone();
+    const pts = [...b.path].reverse();
+    const c = this.cam;
+    const cp = Math.cos(c.pitch), sp = Math.sin(c.pitch);
+    pts.push(new THREE.Vector3(
+      c.target.x - Math.sin(c.yaw) * cp * c.dist,
+      c.target.y + sp * c.dist,
+      c.target.z - Math.cos(c.yaw) * cp * c.dist,
+    ));
+    this.fly(pts, 2.0, onDone);
+  }
+
+  updateCinematic(dt) {
+    const k = this.cinematic;
+    k.t += dt;
+    const u = Math.min(1, k.t / k.dur);
+    const e = u * u * (3 - 2 * u);
+    const sample = (v) => {
+      const f = Math.min(0.9999, v) * (k.points.length - 1);
+      const i = Math.floor(f);
+      return k.points[i].clone().lerp(k.points[i + 1], f - i);
+    };
+    const pos = sample(e);
+    const look = e > 0.97 ? this.cam.target.clone() : sample(Math.min(1, e + 0.06)).add(new THREE.Vector3(0, -0.15, 0));
+    // As the flight lands, look at the ball rather than the bridge.
+    if (k.points === this.cinematic.points && this.cinematicLandsAtBall && e > 0.75) look.lerp(this.cam.target, (e - 0.75) / 0.25);
+    this.camera.position.copy(pos);
+    this.camera.lookAt(look);
+    if (u >= 1) {
+      const done = k.onDone;
+      this.cinematic = null;
+      if (done) done();
+    }
+  }
+
   addWaterfall(g, p) {
     const W = 0.42, H = 5.5;
     // Streaky water that scrolls downwards...
@@ -812,6 +1017,7 @@ export class World {
     const pts = hole.shape;
     for (let i = 0; i < pts.length; i++) segs.push([...pts[i], ...pts[(i + 1) % pts.length]]);
     for (const w of hole.walls || []) segs.push(w);
+    if (this.theme.cloudy) return this.buildCushions(g, segs, terrain);
 
     const pos = [], colr = [];
     const quad = (a, b, c, d, color) => {
@@ -887,6 +1093,28 @@ export class World {
     }
   }
 
+  // Puffy cloud cushions in place of rails.
+  buildCushions(g, segs, terrain) {
+    const spots = [];
+    for (const [x1, z1, x2, z2] of segs) {
+      const len = Math.hypot(x2 - x1, z2 - z1), n = Math.max(1, Math.round(len / 0.16));
+      for (let i = 0; i < n; i++) spots.push([x1 + ((x2 - x1) * i) / n, z1 + ((z2 - z1) * i) / n]);
+    }
+    const puffs = new THREE.InstancedMesh(
+      new THREE.IcosahedronGeometry(0.12, 1),
+      lambert('#ffffff', { emissive: '#eef4fb', emissiveIntensity: 0.45 }),
+      spots.length,
+    );
+    const m = new THREE.Matrix4(), rand = rng(3);
+    spots.forEach(([x, z], i) => {
+      const s = 0.85 + rand() * 0.5;
+      m.makeScale(s, s * 0.85, s).setPosition(x, terrain.height(x, z) + 0.06, z);
+      puffs.setMatrixAt(i, m);
+    });
+    puffs.castShadow = true;
+    g.add(puffs);
+  }
+
   buildWater(g, hole, terrain) {
     this.waters = [];
     for (const zone of hole.zones || []) {
@@ -949,16 +1177,21 @@ export class World {
   buildObstacles(g, hole, terrain) {
     this.spinners = (hole.spinners || []).map(s => {
       const grp = new THREE.Group();
-      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.38, 14), lambert('#ffd23f'));
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.38, 14), lambert(this.theme.spinnerStyle === 'crystal' ? '#5a3f8a' : '#ffd23f'));
       hub.position.y = 0.12;
       hub.castShadow = true;
       const bar = new THREE.Group();
       const segN = 6;
       for (let i = 0; i < segN; i++) {
+        const crystal = this.theme.spinnerStyle === 'crystal';
+        const color = crystal ? CRYSTAL_COLORS[i % 2] : i % 2 ? '#ffffff' : '#ef476f';
         const piece = new THREE.Mesh(
-          new THREE.BoxGeometry((s.len * 2) / segN, 0.13, 0.14),
-          lambert(i % 2 ? '#ffffff' : '#ef476f'),
+          crystal ? new THREE.OctahedronGeometry(1, 0) : new THREE.BoxGeometry((s.len * 2) / segN, 0.13, 0.14),
+          crystal
+            ? new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.5, roughness: 0.2, flatShading: true })
+            : lambert(color),
         );
+        if (crystal) piece.scale.set(s.len / segN + 0.02, 0.09, 0.09);
         piece.position.x = -s.len + (s.len * 2 * (i + 0.5)) / segN;
         piece.castShadow = true;
         bar.add(piece);
@@ -1071,8 +1304,14 @@ export class World {
   }
 
   buildBumpers(g, hole, terrain) {
+    const style = this.theme.bumperStyle;
     this.bumpers = (hole.bumpers || []).map(bp => {
       const grp = new THREE.Group();
+      if (style === 'mushroom' || style === 'puff') {
+        grp.position.set(bp.x, terrain.height(bp.x, bp.z), bp.z);
+        g.add(grp);
+        return { grp, mat: this.styledBumper(grp, bp, style), flash: 0 };
+      }
       const mat = new THREE.MeshStandardMaterial({ color: '#ef476f', emissive: '#ff2e63', emissiveIntensity: 0, roughness: 0.4 });
       const body = new THREE.Mesh(new THREE.CylinderGeometry(bp.r, bp.r * 1.05, 0.2, 24), mat);
       body.position.y = 0.1;
@@ -1087,6 +1326,39 @@ export class World {
       g.add(grp);
       return { grp, mat, flash: 0 };
     });
+  }
+
+  // A bouncy mushroom or a cloud puff in place of a pinball bumper. Returns
+  // the material that flashes on a hit.
+  styledBumper(grp, bp, style) {
+    if (style === 'puff') {
+      const mat = new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#fff3b0', emissiveIntensity: 0, roughness: 0.9, flatShading: true });
+      for (let k = 0; k < 4; k++) {
+        const m = new THREE.Mesh(new THREE.IcosahedronGeometry(bp.r * (k ? 0.7 : 1), 1), mat);
+        m.position.set(k ? Math.cos(k * 2.1) * bp.r * 0.6 : 0, bp.r * (k ? 0.55 : 0.6), k ? Math.sin(k * 2.1) * bp.r * 0.6 : 0);
+        m.scale.y = 0.8;
+        m.castShadow = true;
+        grp.add(m);
+      }
+      return mat;
+    }
+    const h = 0.32;
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(bp.r * 0.55, bp.r * 0.7, h, 12), lambert('#f4ead8'));
+    stem.position.y = h / 2;
+    const mat = new THREE.MeshStandardMaterial({ color: '#e63946', emissive: '#ff4d6d', emissiveIntensity: 0, roughness: 0.5 });
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(bp.r * 1.25, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat);
+    cap.position.y = h - 0.03;
+    cap.scale.y = 0.75;
+    cap.castShadow = stem.castShadow = true;
+    grp.add(stem, cap);
+    const spot = lambert('#ffffff');
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2, e = 0.6;
+      const d = new THREE.Mesh(new THREE.SphereGeometry(bp.r * 0.16, 6, 4), spot);
+      d.position.set(Math.cos(a) * Math.cos(e) * bp.r * 1.25, h - 0.03 + Math.sin(e) * bp.r * 0.95, Math.sin(a) * Math.cos(e) * bp.r * 1.25);
+      grp.add(d);
+    }
+    return mat;
   }
 
   // Green warp pipes: a mouth in the ground and a stub the ball pops out of.
@@ -1412,6 +1684,7 @@ export class World {
   }
 
   updateCamera(dt, focus) {
+    if (this.cinematic) return this.updateCinematic(dt);
     const c = this.cam, want = c.want;
     if (c.overview) {
       const b = this.bounds;

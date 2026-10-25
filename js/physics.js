@@ -264,7 +264,9 @@ export class Sim {
 
   collide(onHit) {
     const t = this.t;
-    for (const s of this.walls) this.hitSegment(s, WALL_HALF, 0, 0, null, onHit);
+    // Bouncy rails (cloud cushions) add a kick, like bumpers.
+    const railOpts = this.hole.railKick ? { kick: this.hole.railKick, what: 'cushion', soft: true } : null;
+    for (const s of this.walls) this.hitSegment(s, WALL_HALF, 0, 0, null, onHit, railOpts);
     for (const w of this.hole.windmills || []) {
       if (!windmillBlocked(w, t)) continue;
       // A sail hangs across the doorway, just in front of the wall.
@@ -337,7 +339,9 @@ export class Sim {
     const vn = rvx * nx + rvz * nz;
     if (vn >= 0) return;
     const impact = -vn;
-    if (opts && opts.kick) {
+    // `soft` kickers only kick a real hit, so a ball resting against one
+    // isn't jostled.
+    if (opts && opts.kick && !(opts.soft && impact < SOFT_IMPACT)) {
       rvx += (-(1 + RESTITUTION) * vn + opts.kick) * nx;
       rvz += (-(1 + RESTITUTION) * vn + opts.kick) * nz;
       if (onHit) onHit(impact + opts.kick, b.x - nx * BALL_R, b.z - nz * BALL_R, opts);

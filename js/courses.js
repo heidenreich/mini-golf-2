@@ -24,12 +24,22 @@ import { roundShape } from './terrain.js';
 //   windmills { x, z, w, d, door, period, phase }: a building with a tunnel
 //             through it; the sails block the doorway as they pass
 //   bumpers   pinball bumpers { x, z, r } that kick the ball away
+//   railKick  rails that bounce the ball back harder (m/s added on a hit)
 //   pipes     warp pipes { from: [x, z], to: [x, z], dir }: roll in at
 //             `from`, pop out at `to` heading along dir (radians, 0 = +z)
 //   tip       shown when the hole starts
 //   surface   the fairway's surface where no zone says otherwise (default grass)
 //   theme     the island's look (see themes.js): meadow, desert, autumn, pond,
 //             tulips, volcano, beach, winter or night
+
+// A puffy cloud: an oval with bulges all round.
+function cloud(cx, cz, rx, rz) {
+  return Array.from({ length: 20 }, (_, i) => {
+    const a = (i / 20) * Math.PI * 2 - Math.PI / 2;
+    const r = 1 + 0.12 * Math.cos(a * 6);
+    return [cx + Math.cos(a) * rx * r, cz + Math.sin(a) * rz * r];
+  });
+}
 
 // An oval outline with n corners (rounded off afterwards like any other).
 function ellipse(cx, cz, rx, rz, n) {
@@ -205,9 +215,94 @@ export const COURSE = {
         { type: 'sand', x: -1.3, z: 12, w: 1.2, d: 1.4 },
       ],
     },
+    {
+      name: 'Mushroom Grove',
+      theme: 'mushroom',
+      par: 3,
+      tip: 'Giant mushrooms bounce the ball about. Find a way through the grove.',
+      shape: [[-1.6, -1], [1.6, -1], [2.2, 4], [1.4, 8], [2.0, 12], [1.4, 14], [-1.6, 14], [-2.0, 10], [-1.2, 6], [-2.2, 3]],
+      round: 1.0,
+      tee: [0, 0],
+      cup: [0.2, 12.4],
+      ground: [
+        { type: 'hill', x: 0.2, z: 12.4, r: 1.3, h: -0.12 },
+      ],
+      bumpers: [
+        { x: 0.7, z: 4.4, r: 0.28 },
+        { x: -0.55, z: 5.4, r: 0.28 },
+        { x: -0.1, z: 7.5, r: 0.2 },
+        { x: 0.8, z: 9.3, r: 0.26 },
+        { x: -0.8, z: 9.7, r: 0.26 },
+      ],
+    },
+    {
+      name: 'Cherry Terraces',
+      theme: 'blossom',
+      par: 3,
+      tip: 'Climb two terraces to the top. Too soft and the ball rolls back down a level.',
+      shape: [[-1.6, -1], [1.6, -1], [2.0, 4], [1.6, 7], [2.1, 10.5], [1.6, 14], [-1.6, 14], [-2.1, 10.5], [-1.6, 7], [-2.0, 4]],
+      round: 1.0,
+      tee: [0, 0],
+      cup: [-0.5, 12.3],
+      ground: [
+        { type: 'ramp', axis: 'z', from: 3.0, to: 4.6, rise: 0.35 },
+        { type: 'ramp', axis: 'z', from: 7.8, to: 9.4, rise: 0.35 },
+      ],
+      zones: [
+        { type: 'sand', x: 1.0, z: 11.4, w: 1.0, d: 1.2 },
+      ],
+    },
+    {
+      name: 'Crystal Sweepers',
+      theme: 'crystal',
+      par: 3,
+      tip: 'Two crystal bars sweep the fairway. Time your putt past each one.',
+      shape: [[-1.6, -1], [1.6, -1], [1.8, 6.5], [1.6, 13], [-1.6, 13], [-1.8, 6.5]],
+      round: 1.0,
+      tee: [0, 0],
+      cup: [0, 11.4],
+      spinners: [
+        { x: 0, z: 4.6, len: 1.25, speed: 1.0, phase: 0 },
+        { x: 0, z: 8.4, len: 1.25, speed: -1.3, phase: 0.8 },
+      ],
+    },
+    {
+      name: 'Cloud Island',
+      theme: 'cloud',
+      bonus: true,
+      par: 2,
+      tip: 'A bonus island! The cloud cushions bounce the ball back. Bank it round the puff.',
+      shape: cloud(0, 5, 2.8, 5.2),
+      round: 0.5,
+      tee: [0, 0.6],
+      cup: [0.3, 9.3],
+      railKick: 1.0,
+      bumpers: [
+        { x: 0, z: 5.2, r: 0.45 },
+      ],
+    },
   ],
 };
 
 for (const hole of COURSE.holes) {
   if (hole.round) hole.shape = roundShape(hole.shape, hole.round);
 }
+
+// The islands are linked by rope bridges. A round crosses nine stages;
+// where a stage has two islands you pick one. A birdie on a `from` stage
+// opens a golden bridge to the bonus island, played as an extra hole
+// before carrying on.
+export const MAP = {
+  stages: [
+    ['Welcome Hill'],
+    ['The Gap', 'Mushroom Grove'],
+    ['Dogleg Bowl'],
+    ['Duck Pond', 'Cherry Terraces'],
+    ['Windmill'],
+    ['Volcano', 'Crystal Sweepers'],
+    ['Switchback'],
+    ['Frozen Island'],
+    ['Warp Finale'],
+  ].map(stage => stage.map(name => COURSE.holes.findIndex(h => h.name === name))),
+  bonus: { hole: COURSE.holes.findIndex(h => h.name === 'Cloud Island'), from: [2, 5] },
+};

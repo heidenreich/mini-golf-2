@@ -8,23 +8,29 @@ No build step. The only dependency is [three.js](https://threejs.org/) r160, ven
 
 ## Course
 
-**Sky Islands** (9 holes, par 26)
+**Sky Islands**: 13 floating islands linked by rope bridges. A round crosses nine of them. After each hole you pick the next island on the course map, and the camera flies you across the bridge to it. Where a stage has two islands, you choose one.
 
-Each hole sits on its own themed floating island: a wobbly outline with bays and headlands, an underside of earth and rock hanging into the sky, things dangling off the edge (vines, roots, icicles or lava), waterfalls on the greener islands, wisps of cloud round the base and small rocks drifting alongside. The fairways have rounded, cloud-soft outlines; rails stay straight where a hole is built around bank shots or moving blocks.
+Each hole sits on its own themed floating island: a wobbly outline with bays and headlands, an underside of earth and rock hanging into the sky, things dangling off the edge (vines, roots, icicles, crystals or lava), waterfalls on the greener islands, wisps of cloud round the base and small rocks drifting alongside. The fairways have rounded, cloud-soft outlines; rails stay straight where a hole is built around bank shots or moving blocks.
 
-| # | Hole | Par | Island | What's on it |
-|---|------|-----|--------|--------------|
-| 1 | Welcome Hill | 2 | **Spring meadow**: flowers and butterflies | A gentle hump down the middle |
-| 2 | The Gap | 2 | **Desert canyon**: red rock, cacti and mesas | Up a kicker and over a chasm. Too soft and the ball drops in (+1 stroke) |
-| 3 | Dogleg Bowl | 3 | **Autumn forest**: orange and red trees, falling leaves | A left-hand dogleg with a bowl in the corner that gathers the ball, then downhill to the cup |
-| 4 | Duck Pond | 3 | **Lily pond**: lily pads, reeds and ducks paddling round | A pond in the middle of the fairway (+1 stroke, ball returns), a hump on the safe side, a bunker by the cup and pinball bumpers behind it |
-| 5 | Windmill | 3 | **Tulip fields**: stripes of tulips | Through the door between the turning sails, or the long way round either side |
-| 6 | Volcano | 3 | **Volcanic island**: black rock, glowing lava cracks, rising embers | The cup sits in a crater on top of a hill. Too soft rolls back, too hard flies over the far rim |
-| 7 | Switchback | 4 | **Tropical beach**: sand, palms and beach umbrellas | Downhill round two corners, past a bunker, over a small ridge |
-| 8 | Frozen Island | 3 | **Winter**: snow, snowy pines, falling snowflakes | A snowy island where the whole fairway is frozen, so everything slides further. Two open-water ponds with an even slicker ice bridge between them, or a narrow path past them along either rail |
-| 9 | Warp Finale | 3 | **Night**: stars, fireflies, glowing rails, fireworks when you hole out | Two sliding blocks, or a warp pipe on the right that shoots you up the ramp into the bowl round the cup |
+| Stage | Island | Par | Theme | What's on it |
+|---|---|---|---|---|
+| 1 | Welcome Hill | 2 | Spring meadow | A gentle hump down the middle |
+| 2 | The Gap | 2 | Desert canyon | Up a kicker and over a chasm. Too soft and the ball drops in (+1 stroke) |
+| 2 | *or* Mushroom Grove | 3 | Mushroom grove | Giant mushrooms that bounce the ball about |
+| 3 | Dogleg Bowl | 3 | Autumn forest | A left-hand dogleg with a bowl in the corner that gathers the ball |
+| 4 | Duck Pond | 3 | Lily pond | A pond in the middle (+1 stroke, ball returns), a bunker, bumpers behind the cup |
+| 4 | *or* Cherry Terraces | 3 | Cherry blossom | Climb two terraces; too soft rolls back down a level |
+| 5 | Windmill | 3 | Tulip fields | Through the door between the turning sails, or round either side |
+| 6 | Volcano | 3 | Volcanic island | The cup sits in a crater on a hill |
+| 6 | *or* Crystal Sweepers | 3 | Crystal caves | Two spinning crystal bars to time your putt past |
+| 7 | Switchback | 4 | Tropical beach | Downhill round two corners, past a bunker, over a ridge |
+| 8 | Frozen Island | 3 | Winter | The whole fairway is frozen; ponds either side of an ice bridge |
+| 9 | Warp Finale | 3 | Night | Sliding blocks, or a warp pipe up the ramp; fireworks when you hole out |
+| ★ | Cloud Island (bonus) | 2 | Cloud | Puffy cloud cushions bounce the ball back. Reached by a golden bridge |
 
-Your best round is saved in your browser.
+**The golden bridge.** Make a birdie (or better) on Dogleg Bowl or on stage 6 and a golden bridge opens to Cloud Island, a bonus hole played before you carry on: a chance to win strokes back. You can visit it once a round.
+
+Scores are measured against par for the route you took; your best round (to par) is saved in your browser.
 
 ## Controls
 
@@ -50,12 +56,12 @@ python3 -m http.server
 
 | File | What it does |
 |------|--------------|
-| `js/courses.js` | Every hole, as plain data |
+| `js/courses.js` | Every hole as plain data, and the course map (stages, forks and the bonus island) |
 | `js/terrain.js` | The ground: height and slope anywhere on a hole, built from ramps, hills, ridges and tilts |
 | `js/physics.js` | Tuning constants and the ball simulation: slopes, friction, rails, sliding blocks, gaps, windmills, bumpers, warp pipes, the cup |
 | `js/render.js` | Everything you see, built with three.js: ground, rails, island, water, cup and flag, obstacles, scenery, aim guide, effects, camera |
 | `js/themes.js` | Each island's look: ground and sky colours, lights, trees and other scenery, particles in the air, and signature pieces (ducks, tulip fields, lava, stars) |
-| `js/main.js` | Game state, input, sound, screens, saving and the main loop |
+| `js/main.js` | Game state, the route and course map, travel between islands, input, sound, screens, saving and the main loop |
 | `css/style.css` | HUD, menus and cards |
 
 How it works:

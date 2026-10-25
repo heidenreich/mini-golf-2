@@ -1,5 +1,6 @@
 import { Vector3 } from '../vendor/three.module.min.js';
-import { COURSE } from './courses.js';
+import { COURSE, MAP } from './courses.js';
+import { THEMES } from './themes.js';
 import { makeTerrain, smooth } from './terrain.js';
 import { Sim, STEP, BALL_R, REST_SPEED } from './physics.js';
 import { World, powerColor } from './render.js';
@@ -24,13 +25,17 @@ try {
   throw err;
 }
 const holes = COURSE.holes;
-const coursePar = holes.reduce((s, h) => s + h.par, 0);
+const STAGES = MAP.stages.length;
 
 const game = {
-  mode: 'title',        // title | aim | rolling | splash | done | final
+  mode: 'title',        // title | aim | rolling | splash | done | travel | final
   holeIndex: 0,
   strokes: 0,
-  scores: [],
+  route: [],            // holes played this round: { hole, stage, score }
+  stage: 0,             // the stage being played (the bonus island keeps the stage before it)
+  onBonus: false,
+  bonusPlayed: false,
+  links: [],            // where the bridges off this island lead: { hole, kind }
   sim: null,
   terrain: null,
   lastRest: [0, 0],
@@ -184,19 +189,18 @@ function scoreWord(strokes, par) {
 
 function totals() {
   let strokes = 0, par = 0;
-  game.scores.forEach((s, i) => {
-    if (s != null) {
-      strokes += s;
-      par += holes[i].par;
-    }
-  });
+  for (const r of game.route) {
+    if (r.score == null) continue;
+    strokes += r.score;
+    par += holes[r.hole].par;
+  }
   return { strokes, par, diff: strokes - par };
 }
 
 function updateHud() {
   const hole = holes[game.holeIndex];
-  $('hud-hole').textContent = game.holeIndex + 1;
-  $('hud-holes').textContent = holes.length;
+  $('hud-hole').textContent = game.onBonus ? '\u2605' : game.stage + 1;
+  $('hud-holes').textContent = STAGES;
   $('hud-par').textContent = hole.par;
   $('hud-strokes').textContent = Math.min(game.strokes, MAX_STROKES);
   $('hud-name').textContent = hole.name;
@@ -207,19 +211,175 @@ function updateHud() {
   chip.classList.toggle('over', t.diff > 0);
 }
 
-function scorecardHtml(current = -1) {
-  const cell = (i) => {
-    const s = game.scores[i];
-    if (s == null) return `<td class="${i === current ? 'current' : ''}">&middot;</td>`;
-    const d = s - holes[i].par;
-    return `<td class="${d < 0 ? 'under' : d > 0 ? 'over' : ''} ${i === current ? 'current' : ''}">${s}</td>`;
-  };
+// One column per stage, plus the bonus island if you went there.
+function scorecardHtml() {
+  const played = stage => game.route.find(r => r.stage === stage && !r.bonus);
+  const bonus = game.route.find(r => r.bonus);
+  const cols = MAP.stages.map((opts, i) => {
+    const r = played(i);
+    const pars = [...new Set(opts.map(h => holes[h].par))];
+    const par = r ? holes[r.hole].par : pars.join('/');
+    const current = !game.onBonus && i === game.stage && game.mode !== 'final';
+    let cell = '&middot;', cls = '';
+    if (r && r.score != null) {
+      const d = r.score - holes[r.hole].par;
+      cell = r.score;
+      cls = d < 0 ? 'under' : d > 0 ? 'over' : '';
+    }
+    return { head: i + 1, par, cell, cls: `${cls} ${current ? 'current' : ''}` };
+  });
+  if (bonus) {
+    const d = bonus.score == null ? 0 : bonus.score - holes[bonus.hole].par;
+    cols.push({ head: '\u2605', par: holes[bonus.hole].par, cell: bonus.score ?? '&middot;', cls: `${d < 0 ? 'under' : d > 0 ? 'over' : ''} ${game.onBonus && game.mode !== 'final' ? 'current' : ''}` });
+  }
   const t = totals();
   return `<table class="scorecard">
-    <tr><th>Hole</th>${holes.map((_, i) => `<th>${i + 1}</th>`).join('')}<th>Tot</th></tr>
-    <tr><th>Par</th>${holes.map(h => `<td>${h.par}</td>`).join('')}<td>${coursePar}</td></tr>
-    <tr><th>You</th>${holes.map((_, i) => cell(i)).join('')}<td><b>${t.strokes || '&middot;'}</b></td></tr>
+    <tr><th>Hole</th>${cols.map(c => `<th>${c.head}</th>`).join('')}<th>Tot</th></tr>
+    <tr><th>Par</th>${cols.map(c => `<td>${c.par}</td>`).join('')}<td>${t.par || '&middot;'}</td></tr>
+    <tr><th>You</th>${cols.map(c => `<td class="${c.cls}">${c.cell}</td>`).join('')}<td><b>${t.strokes || '&middot;'}</b></td></tr>
   </table>`;
+}
+
+// ---- The course map -------------------------------------------------------------
+
+const MAP_W = 340, ROW = 60, TOP = 34;
+// Where each island sits on the map: stage by stage down the page, with
+// the bonus island off to the side.
+function mapSpot(hole) {
+  if (hole === MAP.bonus.hole) return { x: MAP_W - 32, y: TOP + ROW * 3.5 };
+  const stage = MAP.stages.findIndex(opts => opts.includes(hole));
+  const opts = MAP.stages[stage];
+  const x = opts.length === 1 ? 150 : opts.indexOf(hole) === 0 ? 88 : 212;
+  return { x, y: TOP + ROW * stage };
+}
+
+function islandColors(hole) {
+  const g = (THEMES[holes[hole].theme] || THEMES.meadow).ground;
+  return { fill: `#${g.grassA.getHexString()}`, rim: `#${g.rough.getHexString()}` };
+}
+
+// choices: [{ hole, kind }] islands you can go to next (tappable).
+function mapSvg(choices = []) {
+  const visited = new Map(game.route.map(r => [r.hole, r]));
+  const choiceOf = new Map(choices.map(c => [c.hole, c]));
+  const lines = [];
+  const line = (a, b, cls) => {
+    const p = mapSpot(a), q = mapSpot(b);
+    const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2 + 8;
+    lines.push(`<path class="${cls}" d="M${p.x},${p.y} Q${mx},${my} ${q.x},${q.y}"/>`);
+  };
+  const order = game.route.map(r => r.hole);
+  const took = (a, b) => order.some((h, i) => h === a && order[i + 1] === b);
+  for (let s = 0; s < STAGES - 1; s++) {
+    for (const a of MAP.stages[s]) for (const b of MAP.stages[s + 1]) line(a, b, took(a, b) ? 'bridge taken' : 'bridge');
+  }
+  for (const s of MAP.bonus.from) {
+    for (const a of MAP.stages[s]) {
+      const open = choiceOf.get(MAP.bonus.hole) && game.holeIndex === a;
+      line(a, MAP.bonus.hole, `bridge gold ${took(a, MAP.bonus.hole) ? 'taken' : open ? 'open' : ''}`);
+    }
+  }
+  const nodes = holes.map((h, i) => {
+    const { x, y } = mapSpot(i);
+    const c = islandColors(i);
+    const v = visited.get(i);
+    const choice = choiceOf.get(i);
+    const here = i === game.holeIndex && game.mode !== 'title';
+    const score = v && v.score != null ? v.score : '';
+    const d = v && v.score != null ? v.score - h.par : 0;
+    const bonus = i === MAP.bonus.hole;
+    const locked = bonus && !choice && !visited.has(i);
+    const cls = ['island', choice ? 'choice' : '', v ? 'visited' : '', here ? 'here' : '', locked ? 'locked' : '', d < 0 ? 'under' : d > 0 ? 'over' : ''].join(' ');
+    const attrs = choice ? ` data-go="${i}" role="button" tabindex="0" aria-label="Go to ${h.name}, par ${h.par}"` : '';
+    return `<g class="${cls}" transform="translate(${x},${y})"${attrs}>
+      <ellipse class="halo" rx="27" ry="21"/>
+      <ellipse rx="21" ry="15" fill="${c.rim}"/>
+      <ellipse rx="15" ry="10" cy="-1" fill="${c.fill}"/>
+      ${score !== '' ? `<text class="score" y="4">${score}</text>` : locked ? '<text class="lock" y="5">\u{1F512}</text>' : ''}
+      <text class="name" y="28">${h.name}</text>
+      <text class="par" y="38">Par ${h.par}${bonus ? ' \u00b7 bonus' : ''}</text>
+    </g>`;
+  });
+  const H = TOP + ROW * (STAGES - 1) + 46;
+  return `<svg class="map" viewBox="0 0 ${MAP_W} ${H}" role="img" aria-label="Course map">${lines.join('')}${nodes.join('')}</svg>`;
+}
+
+// Where you can go after the hole you're on.
+function nextChoices() {
+  const out = [];
+  const nextStage = game.stage + 1;
+  if (nextStage < STAGES) for (const h of MAP.stages[nextStage]) out.push({ hole: h, kind: 'next' });
+  if (!game.onBonus && !game.bonusPlayed && MAP.bonus.from.includes(game.stage)) {
+    const r = game.route[game.route.length - 1];
+    const birdie = r && r.hole === game.holeIndex && r.score != null && r.score < holes[r.hole].par;
+    out.push({ hole: MAP.bonus.hole, kind: birdie ? 'gold' : 'locked' });
+  }
+  return out;
+}
+
+function showMap({ browse = false } = {}) {
+  const choices = browse ? [] : nextChoices().filter(c => c.kind !== 'locked');
+  const golden = choices.some(c => c.kind === 'gold');
+  showCard(`
+    <h2>${browse ? 'Course map' : 'Where next?'}</h2>
+    <p class="sub">${browse ? 'Your route so far' : golden ? 'Your birdie opened the golden bridge to the bonus island!' : 'Tap the island to cross to next.'}</p>
+    ${mapSvg(choices)}
+    <p class="legend"><span class="key gold"></span> Golden bridges open with a birdie on the island before.</p>
+    <div class="buttons">
+      ${browse ? '<button class="btn primary" data-act="menu">Back</button>' : ''}
+    </div>`);
+  const first = $('card').querySelector('[data-go]');
+  if (first) first.focus({ preventScroll: true });
+}
+
+// ---- Travelling ----------------------------------------------------------------------
+
+function fade(on) {
+  $('fade').classList.toggle('on', on);
+}
+
+// Off along this island's bridge to `hole`, then in along the next one's.
+function travelTo(hole) {
+  const n = game.links.findIndex(l => l.hole === hole);
+  hideCard();
+  setPlaying(false);
+  game.mode = 'travel';
+  const arrive = () => {
+    const bonus = hole === MAP.bonus.hole;
+    if (bonus) {
+      game.onBonus = true;
+      game.bonusPlayed = true;
+    } else {
+      game.onBonus = false;
+      game.stage += 1;
+    }
+    enterHole(hole);
+  };
+  setTimeout(() => fade(true), 1500);
+  world.flyOut(n, arrive);
+}
+
+// Builds the hole and flies in across its bridge.
+function enterHole(hole) {
+  startHole(hole, { quiet: true });
+  game.mode = 'travel';
+  setPlaying(false);
+  fade(false);
+  world.flyIn(() => {
+    game.mode = 'aim';
+    setPlaying(true);
+    const h = holes[hole];
+    const label = game.onBonus ? 'Bonus island' : `Hole ${game.stage + 1}`;
+    toast(`${label} &middot; ${h.name} &middot; Par ${h.par}${h.tip ? `<small>${h.tip}</small>` : ''}`, 3800);
+    $('hint').hidden = game.stage !== 0 || game.onBonus;
+  });
+}
+
+// ---- Saving the best round -----------------------------------------------------------
+
+function bestText(data) {
+  if (!Number.isFinite(data.bestToPar)) return '';
+  return `Best round: <b>${relName(data.bestToPar)}</b>${Number.isFinite(data.best) ? ` (${data.best} strokes)` : ''}`;
 }
 
 // While a card is up, the game controls behind it are out of reach.
@@ -253,16 +413,20 @@ function showTitle() {
   game.mode = 'title';
   game.paused = false;
   setPlaying(false);
+  fade(false);
   $('hint').hidden = true;
-  startHole(0, { quiet: true });
+  game.route = [];
+  game.stage = 0;
+  game.onBonus = false;
+  startHole(MAP.stages[0][0], { quiet: true });
   game.mode = 'title';
   world.cam.overview = true;
   world.showMarker = false;
-  const best = load().best;
+  const best = bestText(load());
   showCard(`
     <h1>Mini Golf <span class="two">2</span></h1>
-    <p class="sub">${COURSE.name} &middot; ${holes.length} holes &middot; par ${coursePar}</p>
-    ${best != null ? `<p>Best round: <b>${best}</b> (${relName(best - coursePar)})</p>` : ''}
+    <p class="sub">${COURSE.name} &middot; ${holes.length} islands &middot; ${STAGES} holes a round</p>
+    ${best ? `<p>${best}</p>` : ''}
     <div class="buttons">
       <button class="btn primary" data-act="play">Play</button>
       <button class="btn" data-act="sound">Sound: ${soundOn ? 'on' : 'off'}</button>
@@ -270,15 +434,17 @@ function showTitle() {
     <ul class="how">
       <li>Drag back from the ball and let go to putt. Pull further for more power.</li>
       <li>Drag anywhere else to look round. Pinch to zoom.</li>
-      <li>Slopes are real: the ball curves and rolls back down hills.</li>
+      <li>After each hole, choose which island to cross to next. A birdie can open a golden bridge.</li>
     </ul>`, { clear: true });
 }
 
 function startRound() {
-  game.scores = holes.map(() => null);
+  game.route = [];
+  game.stage = 0;
+  game.onBonus = false;
+  game.bonusPlayed = false;
   hideCard();
-  setPlaying(true);
-  startHole(0);
+  enterHole(MAP.stages[0][0]);
 }
 
 function startHole(i, { quiet = false, keepStrokes = false } = {}) {
@@ -290,7 +456,9 @@ function startHole(i, { quiet = false, keepStrokes = false } = {}) {
   game.lastRest = [...hole.tee];
   game.sink = null;
   game.aim = { angle: 0, power: 0, keyboard: false };
-  world.buildHole(hole, game.terrain, i);
+  if (!keepStrokes && !game.route.some(r => r.hole === i)) game.route.push({ hole: i, stage: game.stage, bonus: !!game.onBonus, score: null });
+  game.links = nextChoices();
+  world.buildHole(hole, game.terrain, i, { outs: game.links.map(l => l.kind) });
 
   const look = hole.look || hole.cup;
   const yaw = Math.atan2(look[0] - hole.tee[0], look[1] - hole.tee[1]);
@@ -304,27 +472,34 @@ function startHole(i, { quiet = false, keepStrokes = false } = {}) {
   game.mode = 'aim';
   updateHud();
   if (!quiet) {
-    toast(`Hole ${i + 1} &middot; ${hole.name} &middot; Par ${hole.par}${hole.tip ? `<small>${hole.tip}</small>` : ''}`, 3800);
-    $('hint').hidden = i !== 0;
+    toast(`Hole ${game.stage + 1} &middot; ${hole.name} &middot; Par ${hole.par}${hole.tip ? `<small>${hole.tip}</small>` : ''}`, 3800);
+    $('hint').hidden = game.stage !== 0;
   }
 }
 
 function finishHole(score, note = '') {
-  game.scores[game.holeIndex] = score;
+  const r = game.route.find(q => q.hole === game.holeIndex);
+  if (r) r.score = score;
   game.mode = 'done';
   updateHud();
   const hole = holes[game.holeIndex];
-  const last = game.holeIndex === holes.length - 1;
+  const last = !game.onBonus && game.stage === STAGES - 1;
   const d = score - hole.par;
   if (d < 0 || score === 1) sfx.cheer(score === 1 ? 3 : -d);
+  // A birdie on a golden-bridge island opens the way to the bonus island.
+  game.links = nextChoices();
+  if (game.links.some(l => l.kind === 'gold')) {
+    world.unlockGold();
+    setTimeout(() => toast('The golden bridge is open!<small>Your birdie unlocked the bonus island.</small>', 3000), 600);
+  }
   setTimeout(() => {
     if (game.mode !== 'done') return;
     showCard(`
       <h2>${note || scoreWord(score, hole.par)}</h2>
-      <p class="sub">Hole ${game.holeIndex + 1} &middot; ${hole.name} &middot; ${score} stroke${score === 1 ? '' : 's'}</p>
-      ${scorecardHtml(game.holeIndex)}
+      <p class="sub">${game.onBonus ? 'Bonus island' : `Hole ${game.stage + 1}`} &middot; ${hole.name} &middot; ${score} stroke${score === 1 ? '' : 's'}</p>
+      ${scorecardHtml()}
       <div class="buttons">
-        <button class="btn primary" data-act="${last ? 'final' : 'next'}">${last ? 'See your score' : 'Next hole'}</button>
+        <button class="btn primary" data-act="${last ? 'final' : 'map'}">${last ? 'See your score' : 'Choose the next island'}</button>
       </div>`);
   }, score === 1 ? 1600 : 1000);
 }
@@ -334,8 +509,9 @@ function showFinal() {
   setPlaying(false);
   const t = totals();
   const data = load();
-  const isBest = data.best == null || t.strokes < data.best;
+  const isBest = !Number.isFinite(data.bestToPar) || t.diff < data.bestToPar;
   if (isBest) {
+    data.bestToPar = t.diff;
     data.best = t.strokes;
     save(data);
   }
@@ -344,8 +520,9 @@ function showFinal() {
   showCard(`
     <h2>Round complete</h2>
     <div class="big">${t.strokes}</div>
-    <p>${relName(t.diff)} against par ${coursePar}</p>
-    ${isBest ? '<p class="new-best">New best round!</p>' : `<p class="sub">Best round: ${data.best}</p>`}
+    <p>${relName(t.diff)} against par ${t.par} for your route</p>
+    ${isBest ? '<p class="new-best">New best round!</p>' : `<p class="sub">${bestText(data)}</p>`}
+    ${mapSvg()}
     ${scorecardHtml()}
     <div class="buttons">
       <button class="btn primary" data-act="play">Play again</button>
@@ -359,10 +536,11 @@ function showMenu() {
   cancelDrag();
   showCard(`
     <h2>Paused</h2>
-    <p class="sub">Hole ${game.holeIndex + 1} &middot; ${holes[game.holeIndex].name}</p>
-    ${scorecardHtml(game.holeIndex)}
+    <p class="sub">${game.onBonus ? 'Bonus island' : `Hole ${game.stage + 1}`} &middot; ${holes[game.holeIndex].name}</p>
+    ${scorecardHtml()}
     <div class="buttons">
       <button class="btn primary" data-act="resume">Resume</button>
+      <button class="btn" data-act="map-browse">Course map</button>
       <button class="btn" data-act="restart">Back to the tee</button>
       <button class="btn" data-act="sound">Sound: ${soundOn ? 'on' : 'off'}</button>
       <button class="btn" data-act="title">Quit to title</button>
@@ -370,12 +548,16 @@ function showMenu() {
 }
 
 $('card').addEventListener('click', e => {
+  const go = e.target.closest('[data-go]');
+  if (go) return travelTo(Number(go.dataset.go));
   const btn = e.target.closest('button[data-act]');
   if (!btn) return;
   ac();
   const act = btn.dataset.act;
   if (act === 'play') startRound();
-  else if (act === 'next') { hideCard(); startHole(game.holeIndex + 1); }
+  else if (act === 'map') showMap();
+  else if (act === 'map-browse') showMap({ browse: true });
+  else if (act === 'menu') { game.paused = false; showMenu(); }
   else if (act === 'final') showFinal();
   else if (act === 'title') showTitle();
   else if (act === 'resume') { hideCard(); game.paused = false; }
@@ -386,6 +568,14 @@ $('card').addEventListener('click', e => {
     data.sound = soundOn;
     save(data);
     btn.textContent = `Sound: ${soundOn ? 'on' : 'off'}`;
+  }
+});
+// Map islands are SVG, so Enter and Space need wiring up by hand.
+$('card').addEventListener('keydown', e => {
+  const go = e.target.closest && e.target.closest('[data-go]');
+  if (go && (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault();
+    travelTo(Number(go.dataset.go));
   }
 });
 
@@ -943,5 +1133,16 @@ window.miniGolf2 = {
   game, world, holes,
   shoot: (angle, power) => shoot(angle, power),
   startRound,
-  startHole: i => { hideCard(); setPlaying(true); if (!game.scores.length) game.scores = holes.map(() => null); startHole(i); },
+  // Jumps straight to a hole (for tests): the stage is taken from the map.
+  startHole: i => {
+    hideCard();
+    setPlaying(true);
+    fade(false);
+    const stage = MAP.stages.findIndex(opts => opts.includes(i));
+    game.onBonus = stage < 0;
+    if (stage >= 0) game.stage = stage;
+    startHole(i);
+  },
+  travelTo,
+  MAP,
 };

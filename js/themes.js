@@ -9,7 +9,10 @@ import { insidePolygon } from './terrain.js';
 //             island's underside, plus `glossy` for a shiny fairway
 //   sky       gradient colours, fog colour and the lights
 //   chasm     colours for the walls and floor of a gap
-//   edge      what hangs off the island's edge: vines, roots, icicles or lava
+//   edge      what hangs off the island's edge: vines, roots, icicles,
+//             crystals or lava
+//   bumperStyle / spinnerStyle   restyle those obstacles (mushroom, puff, crystal)
+//   cloudy    the island is a cloud: puffy rails and a cloud underneath
 //   waterfall true for streams pouring off each side
 //   scenery   (api, rand, roomy) => an Object3D for a spot in the rough;
 //             roomy is true well away from the rails, where tall things fit
@@ -209,6 +212,75 @@ function makeUmbrella(rand) {
     g.add(seg);
   }
   g.rotation.z = (rand() - 0.5) * 0.3;
+  return g;
+}
+
+function makeMushroom(rand, scale = 1) {
+  const g = new THREE.Group();
+  const h = 0.4 + rand() * 0.5, r = 0.25 + rand() * 0.25;
+  g.add(mesh(new THREE.CylinderGeometry(r * 0.25, r * 0.35, h, 8), lambert('#f4ead8'), { y: h / 2 }));
+  const capColor = pick(rand, ['#e63946', '#8e5ad6', '#2ec4b6', '#ff8c42']);
+  const cap = mesh(new THREE.SphereGeometry(r, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), lambert(capColor), { y: h - 0.02 });
+  cap.scale.y = 0.7;
+  g.add(cap);
+  const spot = lambert('#ffffff');
+  for (let i = 0; i < 6; i++) {
+    const a = rand() * Math.PI * 2, e = 0.25 + rand() * 0.9;
+    g.add(mesh(new THREE.SphereGeometry(r * 0.12, 6, 4), spot, { x: Math.cos(a) * Math.cos(e) * r, y: h - 0.02 + Math.sin(e) * r * 0.7, z: Math.sin(a) * Math.cos(e) * r, shadow: false }));
+  }
+  return finish(g, rand, scale);
+}
+
+function makeCherryTree(rand) {
+  const g = new THREE.Group();
+  const trunk = lambert('#5a3a2a', { flatShading: true });
+  g.add(mesh(new THREE.CylinderGeometry(0.05, 0.08, 0.6, 6), trunk, { y: 0.3 }));
+  const pinks = ['#ffb7d5', '#ff9cc4', '#ffc8dd', '#ffffff'];
+  for (let i = 0; i < 4; i++) {
+    const c = mesh(new THREE.IcosahedronGeometry(0.22 + rand() * 0.12, 0), lambert(pick(rand, pinks), { flatShading: true }), {
+      x: (rand() - 0.5) * 0.45, y: 0.65 + rand() * 0.3, z: (rand() - 0.5) * 0.45,
+    });
+    g.add(c);
+  }
+  return finish(g, rand);
+}
+
+function makeLantern(rand) {
+  const g = new THREE.Group();
+  const stone = lambert('#a8a49c', { flatShading: true });
+  g.add(mesh(new THREE.BoxGeometry(0.18, 0.06, 0.18), stone, { y: 0.03 }));
+  g.add(mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.25, 6), stone, { y: 0.18 }));
+  g.add(mesh(new THREE.BoxGeometry(0.16, 0.12, 0.16), lambert('#fff3c4', { emissive: '#ffcf6b', emissiveIntensity: 0.6 }), { y: 0.36 }));
+  g.add(mesh(new THREE.ConeGeometry(0.17, 0.12, 4), stone, { y: 0.48 }).rotateY(Math.PI / 4));
+  g.rotation.y = rand() * 6;
+  return g;
+}
+
+export const CRYSTAL_COLORS = ['#b388ff', '#64dfdf', '#ff7ac6', '#7aa2ff'];
+
+function makeCrystals(rand, scale = 1) {
+  const g = new THREE.Group();
+  const color = pick(rand, CRYSTAL_COLORS);
+  const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.45, roughness: 0.2, metalness: 0.1, flatShading: true });
+  const n = 3 + Math.floor(rand() * 3);
+  for (let i = 0; i < n; i++) {
+    const h = 0.25 + rand() * 0.55;
+    const c = mesh(new THREE.OctahedronGeometry(0.1 + rand() * 0.06, 0), mat, { x: (rand() - 0.5) * 0.3, y: h * 0.5, z: (rand() - 0.5) * 0.3 });
+    c.scale.set(1, h / 0.15, 1);
+    c.rotation.set((rand() - 0.5) * 0.6, rand() * 3, (rand() - 0.5) * 0.6);
+    g.add(c);
+  }
+  return finish(g, rand, scale);
+}
+
+function makePuff(rand) {
+  const g = new THREE.Group();
+  const mat = lambert('#ffffff', { flatShading: true, emissive: '#eef4fb', emissiveIntensity: 0.4 });
+  for (let i = 0; i < 3; i++) {
+    const m = mesh(new THREE.IcosahedronGeometry(0.18 + rand() * 0.12, 1), mat, { x: (i - 1) * 0.22, y: 0.12 + rand() * 0.08, z: (rand() - 0.5) * 0.2 });
+    m.scale.y = 0.75;
+    g.add(m);
+  }
   return g;
 }
 
@@ -534,6 +606,67 @@ export const THEMES = {
     scenery: (api, rand, roomy) => (roomy && rand() < 0.55 ? makeSnowyPine(rand) : rand() < 0.75 ? makeMound(rand, '#f3f8fc') : makeRock(rand, '#9aa0a6', '#f7fbff')),
     flora: { count: 0 },
     drift: { kind: 'fall', count: 450, colors: ['#ffffff'], size: 0.07, speed: 0.4, sway: 0.08 },
+  },
+
+  mushroom: {
+    name: 'Mushroom grove',
+    edge: 'vines',
+    bumperStyle: 'mushroom',
+    ground: {
+      grassA: C('#74c48a'), grassB: C('#67b77d'), green: C('#8fd6a0'),
+      rough: C('#4f9e72'), roughDark: C('#428c62'),
+      dirtTop: C('#7a5a6e'), dirt: C('#5e4357'), rock: C('#6c6a8a'),
+    },
+    sky: { top: '#7f73c9', bottom: '#f3dcff', fog: '#e9d6fa', hemi: ['#f3e8ff', '#4f6e5a', 0.95], sun: ['#fff0f6', 2.5] },
+    chasm: CHASM,
+    scenery: (api, rand, roomy) => (roomy && rand() < 0.7 ? makeMushroom(rand, 1.4) : rand() < 0.6 ? makeMushroom(rand, 0.6) : makeBush(rand, ['#3f8a5c', '#4f9e72'])),
+    flora: { count: 60, make: rand => makeMushroom(rand, 0.18) },
+    drift: { kind: 'hover', count: 40, colors: ['#9ff6ff', '#d4b3ff'], size: 0.07, glow: true },
+  },
+
+  blossom: {
+    name: 'Cherry blossom',
+    edge: 'roots',
+    waterfall: true,
+    ground: { ...GRASS, rough: C('#7cc46a'), roughDark: C('#6cb35b'), ...DIRT },
+    sky: { top: '#7cb7ea', bottom: '#ffe1ee', fog: '#fbe3ee', hemi: ['#fff0f6', '#6a8f5a', 1.0], sun: ['#fff4ea', 2.6] },
+    chasm: CHASM,
+    scenery: (api, rand, roomy) => (roomy && rand() < 0.7 ? makeCherryTree(rand) : rand() < 0.4 ? makeLantern(rand) : makeBush(rand, ['#5db84f', '#6cbf4a'])),
+    flora: { count: 120, make: rand => makeFlower(rand, ['#ffb7d5', '#ffc8dd', '#ffffff']) },
+    drift: { kind: 'fall', count: 60, colors: ['#ffb7d5', '#ffc8dd', '#ffffff'], size: 0.07, speed: 0.35, sway: 0.5 },
+  },
+
+  crystal: {
+    name: 'Crystal caves',
+    edge: 'crystals',
+    spinnerStyle: 'crystal',
+    ground: {
+      grassA: C('#5aa88a'), grassB: C('#4e9b7e'), green: C('#6dbf9e'),
+      rough: C('#3c4258'), roughDark: C('#30354a'),
+      dirtTop: C('#3a3550'), dirt: C('#2c2840'), rock: C('#5a3f8a'),
+    },
+    sky: { top: '#1c2556', bottom: '#8a6cc4', fog: '#5e4c92', hemi: ['#c9b8ff', '#2a2a44', 0.85], sun: ['#e6dcff', 2.0] },
+    chasm: CHASM,
+    scenery: (api, rand, roomy) => (roomy && rand() < 0.6 ? makeCrystals(rand, 1.6) : rand() < 0.6 ? makeCrystals(rand, 0.8) : makeRock(rand, '#4a4f66')),
+    flora: { count: 50, make: rand => makeCrystals(rand, 0.25) },
+    drift: { kind: 'hover', count: 45, colors: ['#e0c3ff', '#9ff6ff', '#ffc2f0'], size: 0.06, glow: true },
+  },
+
+  cloud: {
+    name: 'Cloud island',
+    edge: null,
+    cloudy: true,
+    bumperStyle: 'puff',
+    ground: {
+      grassA: C('#eef6ff'), grassB: C('#e1ecfa'), green: C('#ffffff'),
+      rough: C('#ffffff'), roughDark: C('#eef3f9'),
+      dirtTop: C('#f4f7fb'), dirt: C('#e6edf6'), rock: C('#d3dcea'),
+    },
+    sky: { top: '#93c4ef', bottom: '#ffe3f1', fog: '#fbe6f2', hemi: ['#ffffff', '#c9d6ea', 1.15], sun: ['#fff8ee', 2.3] },
+    chasm: CHASM,
+    scenery: (api, rand) => makePuff(rand),
+    flora: { count: 0 },
+    drift: { kind: 'hover', count: 40, colors: ['#ffe27a', '#ffffff'], size: 0.06, glow: true },
   },
 
   night: {
