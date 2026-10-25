@@ -140,6 +140,9 @@ const sfx = {
     tone(300, 0.35, { vol: 0.14, type: 'triangle', slide: 3 });
     tone(450, 0.3, { vol: 0.08, type: 'sine', at: 0.05, slide: 2.5 });
   },
+  ice(speed) {
+    noise(0.28, { vol: Math.min(0.08, 0.02 + speed * 0.012), freq: 6000, q: 0.7, type: 'highpass' });
+  },
   fall() {
     tone(500, 0.6, { vol: 0.14, type: 'triangle', slide: 0.25 });
   },
@@ -530,6 +533,7 @@ function physicsStep() {
 
 // Where to draw the ball (it leaves the physics when it drops in or splashes).
 const ballPos = new Vector3();
+let frostTimer = 0, hissCount = 0;
 const ballVel = { x: 0, z: 0 };
 function placeBall(dt) {
   const sim = game.sim, b = sim.ball, terrain = game.terrain;
@@ -558,6 +562,16 @@ function placeBall(dt) {
     }
     return;
   }
+  // Frost and a faint hiss behind a ball sliding on ice.
+  if (game.mode === 'rolling' && sim.speed > 0.3 && terrain.surfaceAt(b.x, b.z) === 'ice') {
+    frostTimer -= dt;
+    if (frostTimer <= 0) {
+      frostTimer = 0.07;
+      world.frost(b.x, b.z);
+      if ((hissCount = (hissCount + 1) % 4) === 0) sfx.ice(sim.speed);
+    }
+  }
+
   // Over a gap the ball flies in an arc from one lip to the other.
   let lift = 0;
   if (sim.air) {

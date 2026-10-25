@@ -110,6 +110,47 @@ function makeIsland(b) {
   };
 }
 
+// Pale blue ice with long streaks and a few cracks. `aspect` is width / length.
+function iceTexture(aspect) {
+  const W = 128, H = Math.round(128 / Math.max(0.1, aspect));
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = Math.min(1024, H);
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, W, c.height);
+  grad.addColorStop(0, '#d8f3ff');
+  grad.addColorStop(0.5, '#bfe7fb');
+  grad.addColorStop(1, '#e6f8ff');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, W, c.height);
+  const rand = rng(12);
+  g.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+  for (let i = 0; i < 26; i++) {
+    g.lineWidth = 1 + rand() * 3;
+    const x = rand() * W, y = rand() * c.height, len = 30 + rand() * 90;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x + len * 0.35, y + len);
+    g.stroke();
+  }
+  g.strokeStyle = 'rgba(120, 175, 205, 0.55)';
+  g.lineWidth = 1;
+  for (let i = 0; i < 7; i++) {
+    let x = rand() * W, y = rand() * c.height;
+    g.beginPath();
+    g.moveTo(x, y);
+    for (let k = 0; k < 5; k++) {
+      x += (rand() - 0.5) * 30;
+      y += (rand() - 0.3) * 30;
+      g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 function skyTexture() {
   const c = document.createElement('canvas');
   c.width = 4;
@@ -291,6 +332,7 @@ export class World {
     this.buildSkirt(g, terrain, island);
     this.buildRails(g, hole, terrain);
     this.buildWater(g, hole, terrain);
+    this.buildIce(g, hole, terrain);
     this.buildCup(g, hole, terrain);
     this.buildObstacles(g, hole, terrain);
     this.buildGaps(g, hole, terrain);
@@ -795,6 +837,56 @@ export class World {
     }
   }
 
+  // Ice: a glossy, see-through slab just proud of the grass, with streaks,
+  // cracks, a frosted edge and twinkling glints, so it reads as slippery.
+  buildIce(g, hole, terrain) {
+    this.glints = [];
+    const rand = rng(77);
+    for (const zone of hole.zones || []) {
+      if (zone.type !== 'ice' || !zone.rect) continue;
+      const nx = Math.max(2, Math.round(zone.w / 0.1)), nz = Math.max(2, Math.round(zone.d / 0.1));
+      const geo = new THREE.PlaneGeometry(zone.w, zone.d, nx, nz);
+      geo.rotateX(-Math.PI / 2);
+      const pos = geo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = zone.x + pos.getX(i), z = zone.z + pos.getZ(i);
+        pos.setY(i, terrain.renderHeight(x, z) + 0.012);
+      }
+      geo.computeVertexNormals();
+      const slab = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+        map: iceTexture(zone.w / zone.d), roughness: 0.08, metalness: 0.2,
+        transparent: true, opacity: 0.92, emissive: '#cdeeff', emissiveIntensity: 0.18,
+      }));
+      slab.position.set(zone.x, 0, zone.z);
+      slab.receiveShadow = true;
+      g.add(slab);
+
+      const frost = lambert('#f4fbff', { emissive: '#bfe6ff', emissiveIntensity: 0.4 });
+      for (const sx of [-1, 1]) {
+        const x = zone.x + (sx * zone.w) / 2;
+        const edge = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, zone.d), frost);
+        edge.position.set(x, terrain.renderHeight(x, zone.z) + 0.015, zone.z);
+        g.add(edge);
+      }
+      const glintGeo = new THREE.OctahedronGeometry(0.035, 0);
+      const glintMat = new THREE.MeshBasicMaterial({ color: '#ffffff' });
+      for (let i = 0; i < Math.round(zone.w * zone.d * 4); i++) {
+        const x = zone.x + (rand() - 0.5) * zone.w * 0.9, z = zone.z + (rand() - 0.5) * zone.d * 0.95;
+        const m = new THREE.Mesh(glintGeo, glintMat);
+        m.position.set(x, terrain.renderHeight(x, z) + 0.03, z);
+        m.scale.set(1, 0.3, 1);
+        g.add(m);
+        this.glints.push({ m, phase: rand() * Math.PI * 2, rate: 1.5 + rand() * 2 });
+      }
+    }
+  }
+
+  // A puff of frost behind a ball sliding on ice.
+  frost(x, z) {
+    const y = this.terrain.height(x, z) + 0.03;
+    this.burst(x, y, z, { count: 3, colors: ['#ffffff', '#d7f2fb'], speed: 0.3, up: 0.5, life: 0.5, size: 0.035, gravity: 1 });
+  }
+
   bumperHit(i) {
     const b = this.bumpers && this.bumpers[i];
     if (b) b.flash = 1;
@@ -1116,6 +1208,11 @@ export class World {
       pos.setZ(i, Math.sin(bx * 9 - this.time * 6) * 0.04 * (bx / 0.46));
     }
     pos.needsUpdate = true;
+
+    for (const gl of this.glints) {
+      const s = Math.pow(Math.max(0, Math.sin(this.time * gl.rate + gl.phase)), 12);
+      gl.m.scale.set(s, s * 0.3, s);
+    }
 
     for (const w of this.waters) {
       w.mesh.material.emissiveIntensity = 0.22 + Math.sin(this.time * 1.6) * 0.06;
