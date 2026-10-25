@@ -37,8 +37,8 @@ Scores are measured against par for the route you took; your best round (to par)
 ## Controls
 
 - **Drag back from the ball** and release to putt, like a slingshot. A dashed ring round the ball shows where a drag starts a putt. Full power is a thumb-length pull. A ring round the ball and a bar at the bottom show the power, and dotted guides show how the start of the roll will curve on slopes, through one bounce off a rail. To cancel, bring your finger back to where it started (the bar says "Let go here to cancel") and let go.
-- **Look round:** drag anywhere away from the ball with one finger (side to side turns, up and down tilts), pinch to zoom; on a computer, drag away from the ball or right-drag, and use the mouse wheel to zoom; Q/E on a keyboard; or the ⟲ ⟳ buttons. You can look round while the ball is rolling.
-- **⚑** turns the camera to face the flag; it also turns on its own when the ball stops with the flag well out of view. **▦** (or V) shows an overview of the whole hole, with a yellow ring round the ball.
+- **Look round:** drag anywhere away from the ball with one finger (side to side turns, up and down tilts), pinch to zoom; on a computer, drag away from the ball or right-drag, and use the mouse wheel to zoom; Q/E on a keyboard; or the Turn buttons (‹ ›). You can look round while the ball is rolling.
+- **⚑** turns the camera to face the flag; it also turns on its own when the ball stops with the flag well out of view. **Overview** (or V) shows an overview of the whole hole, with a yellow ring round the ball.
 - **Keyboard:** arrow keys aim (left/right) and set power (up/down), Shift for fine steps, Space or Enter putts. R puts the ball back on the tee, Esc opens the menu.
 - Water costs a stroke and puts the ball back where you played from. The ball is picked up after 8 strokes.
 - **Back to the tee** (R, or in the menu) is a way out of a bad spot, not a do-over: the strokes you've taken still count.
