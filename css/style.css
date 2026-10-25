@@ -69,6 +69,21 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 .chip b { font-weight: 700; }
 .chip.icon { width: 44px; height: 44px; padding: 0; justify-content: center; font-size: 20px; border-radius: 50%; }
 button.chip:active { transform: scale(0.94); }
+.chip.icon { position: relative; }
+.chip.icon svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+/* A word under each camera button: the icons alone are easy to misread. */
+.chip.icon .cap {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+  text-shadow: 0 0 3px #fff, 0 0 6px #fff;
+  pointer-events: none;
+}
 button.chip[aria-pressed="true"] { background: var(--ink); color: #fff; }
 
 #hud {
@@ -88,7 +103,7 @@ body.aiming #hud-name { visibility: hidden; }
 #cam-controls {
   position: fixed;
   right: 10px;
-  bottom: calc(14px + var(--safe-bottom));
+  bottom: calc(28px + var(--safe-bottom));
   display: flex;
   gap: 10px;
 }
@@ -122,7 +137,7 @@ body.aiming #hud-name { visibility: hidden; }
 #hint {
   position: fixed;
   left: 10px;
-  bottom: calc(18px + var(--safe-bottom));
+  bottom: calc(32px + var(--safe-bottom));
   max-width: calc(100% - 250px);
   padding: 6px 10px;
   border-radius: 12px;
@@ -212,21 +227,23 @@ body.aiming #hud-name { visibility: hidden; }
   #hud-name { display: none; }   /* the hole's name is in the banner and the menu */
   #power { top: calc(58px + var(--safe-top)); }
   #toast { top: calc(56px + var(--safe-top)); }
-  #hint { max-width: none; right: 10px; bottom: calc(68px + var(--safe-bottom)); }
+  #hint { max-width: none; right: 10px; bottom: calc(96px + var(--safe-bottom)); }
 }
 
-/* Phone held sideways: the HUD becomes a column down the left so the far end
-   of the hole stays clear, the power bar drops to the bottom edge (away from
-   the ball) and cards get compact. */
+/* Phone held sideways: one compact row of scores at the top left, the power
+   bar at the top right (away from the finger pulling back), banners kept
+   small, and cards get compact. */
 @media (max-height: 500px) and (orientation: landscape) {
-  #hud { right: auto; }
-  #hud .row { flex-direction: column; align-items: flex-start; }
-  #hud-name { margin-top: 6px; }
-  #power { top: calc(12px + var(--safe-top)); width: min(240px, 34vw); }
+  #hud { right: auto; left: calc(10px + env(safe-area-inset-left, 0px)); }
+  #hud .row { flex-wrap: nowrap; gap: 4px; }
+  .chip { height: 32px; padding: 0 9px; font-size: 13.5px; }
+  #hud .chip.icon { width: 36px; height: 36px; font-size: 17px; }
   #hud-name { display: none; }
-  #toast { top: calc(232px + var(--safe-top)); max-width: 260px; font-size: 14px; padding: 8px 12px; }
+  #power { top: calc(12px + var(--safe-top)); left: auto; right: calc(10px + env(safe-area-inset-right, 0px)); transform: none; width: min(220px, 30vw); }
+  #cam-controls { right: calc(10px + env(safe-area-inset-right, 0px)); bottom: calc(24px + var(--safe-bottom)); gap: 8px; }
+  #toast { top: calc(52px + var(--safe-top)); max-width: min(300px, 42vw); font-size: 14px; padding: 8px 12px; }
   #toast small { font-size: 13px; }
-  #hint { bottom: calc(18px + var(--safe-bottom)); left: auto; right: 250px; max-width: 30vw; }
+  #hint { bottom: calc(14px + var(--safe-bottom)); right: 240px; max-width: none; }
   #overlay { padding: 8px; }
   .card { width: min(640px, 100%); padding: 14px 18px; }
   .card h1 { font-size: 30px; }
@@ -287,8 +304,8 @@ body.aiming #hud-name { visibility: hidden; }
 .map .bridge.gold { stroke: #e0a800; opacity: 0.6; }
 .map .bridge.gold.open { opacity: 1; stroke-width: 3.5; stroke-dasharray: 7 4; }
 .map .island .halo { fill: none; stroke: none; }
-.map .island .name { font-size: 10px; font-weight: 600; text-anchor: middle; fill: var(--ink); }
-.map .island .par { font-size: 9px; text-anchor: middle; fill: var(--ink); opacity: 0.75; }
+.map .island .name { font-size: 12.5px; font-weight: 600; text-anchor: middle; fill: var(--ink); paint-order: stroke; stroke: #fff; stroke-width: 3px; }
+.map .island .par { font-size: 11px; text-anchor: middle; fill: var(--ink); opacity: 0.8; }
 .map .island .score { font-size: 13px; font-weight: 700; text-anchor: middle; fill: #fff; paint-order: stroke; stroke: rgba(31, 53, 80, 0.7); stroke-width: 3px; }
 .map .island .lock { font-size: 12px; text-anchor: middle; }
 .map .island:not(.visited):not(.choice) { opacity: 0.55; }
@@ -305,7 +322,7 @@ body.aiming #hud-name { visibility: hidden; }
 .card .legend { font-size: 13px; opacity: 0.8; margin-top: 6px; }
 .card .legend .key { display: inline-block; width: 18px; height: 0; border-top: 3px dashed #e0a800; vertical-align: middle; margin-right: 4px; }
 @media (max-height: 500px) and (orientation: landscape) {
-  .map { max-width: 230px; }
+  .map { max-width: 320px; }
 }
 
 [hidden] { display: none !important; }

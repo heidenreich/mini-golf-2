@@ -55,6 +55,8 @@ const game = {
   timer: 0,
   sink: null,
   paused: false,
+  menuFrom: null,       // where the pause menu was opened: null (playing) | 'done' | 'choose'
+  doneCard: '',         // the end-of-hole card, to go back to from the menu
 };
 
 // ---- Saving -----------------------------------------------------------------
@@ -254,11 +256,11 @@ function scorecardHtml() {
 
 // ---- The course map -------------------------------------------------------------
 
-const MAP_W = 340, ROW = 60, TOP = 34;
+const MAP_W = 340, ROW = 64, TOP = 34;
 // Where each island sits on the map: stage by stage down the page, with
 // the bonus island off to the side.
 function mapSpot(hole) {
-  if (hole === MAP.bonus.hole) return { x: MAP_W - 32, y: TOP + ROW * 3.5 };
+  if (hole === MAP.bonus.hole) return { x: MAP_W - 40, y: TOP + ROW * 3.5 };
   const stage = MAP.stages.findIndex(opts => opts.includes(hole));
   const opts = MAP.stages[stage];
   const x = opts.length === 1 ? 150 : opts.indexOf(hole) === 0 ? 88 : 212;
@@ -308,11 +310,11 @@ function mapSvg(choices = []) {
       <ellipse rx="21" ry="15" fill="${c.rim}"/>
       <ellipse rx="15" ry="10" cy="-1" fill="${c.fill}"/>
       ${score !== '' ? `<text class="score" y="4">${score}</text>` : locked ? '<text class="lock" y="5">\u{1F512}</text>' : ''}
-      <text class="name" y="28">${h.name}</text>
-      <text class="par" y="38">Par ${h.par}${bonus ? ' \u00b7 bonus' : ''}</text>
+      <text class="name" y="31">${h.name}</text>
+      <text class="par" y="44">Par ${h.par}${bonus ? ' \u00b7 bonus' : ''}</text>
     </g>`;
   });
-  const H = TOP + ROW * (STAGES - 1) + 46;
+  const H = TOP + ROW * (STAGES - 1) + 52;
   return `<svg class="map" viewBox="0 0 ${MAP_W} ${H}" role="img" aria-label="Course map">${lines.join('')}${nodes.join('')}</svg>`;
 }
 
@@ -353,8 +355,7 @@ function choosePath() {
   setPlaying(false);
   game.mode = 'choose';
   world.lookAtBridges();
-  const box = $('paths');
-  box.innerHTML = game.links.map((l, n) => {
+  $('paths').innerHTML = game.links.map((l, n) => {
     const h = holes[l.hole];
     const theme = (THEMES[h.theme] || THEMES.meadow).name;
     if (l.kind === 'locked') {
@@ -363,7 +364,14 @@ function choosePath() {
     return `<button class="path-choice ${l.kind === 'gold' ? 'gold' : ''}" data-n="${n}" data-go="${l.hole}">
       <b>${h.name}</b><span>Par ${h.par} &middot; ${l.kind === 'gold' ? 'bonus island' : theme}</span></button>`;
   }).join('');
+  showPaths();
+}
+
+function showPaths() {
+  const box = $('paths');
   box.hidden = false;
+  // The menu button stays up so you can still pause, quit or turn the sound off.
+  $('hud').hidden = false;
   placePathLabels();
   const first = box.querySelector('button');
   if (first) first.focus({ preventScroll: true });
@@ -423,8 +431,7 @@ function travelTo(hole) {
     }
     enterHole(hole);
   };
-  setTimeout(() => fade(true), 1500);
-  world.flyOut(n, arrive);
+  world.flyOut(n, arrive, () => fade(true));
 }
 
 // Builds the hole and flies in across its bridge.
@@ -577,6 +584,7 @@ function startHole(i, { quiet = false, keepStrokes = false } = {}) {
   if (!keepStrokes) game.strokes = 0;
   game.lastRest = [...hole.tee];
   game.sink = null;
+  game.doneCard = '';
   game.aim = { angle: 0, power: 0, keyboard: false };
   if (!keepStrokes && !game.route.some(r => r.hole === i)) game.route.push({ hole: i, stage: game.stage, bonus: !!game.onBonus, score: null });
   game.links = nextChoices();
@@ -592,6 +600,7 @@ function startHole(i, { quiet = false, keepStrokes = false } = {}) {
   Object.assign(world.cam.want, { yaw, ...view });
   world.cam.target.set(hole.tee[0], game.terrain.height(...hole.tee), hole.tee[1]);
   $('cam-view').setAttribute('aria-pressed', 'false');
+  $('cam-view-cap').textContent = 'Overview';
   world.showMarker = true;
 
   game.mode = 'aim';
@@ -627,11 +636,12 @@ function finishHole(score, note = '') {
       : '<button class="btn primary" data-act="paths">Choose your path</button>';
   setTimeout(() => {
     if (game.mode !== 'done') return;
-    showCard(`
+    game.doneCard = `
       <h2>${note || scoreWord(score, hole.par)}</h2>
       <p class="sub">${game.onBonus ? 'Bonus island' : `Hole ${game.stage + 1}`} &middot; ${hole.name} &middot; ${score} stroke${score === 1 ? '' : 's'}</p>
       ${scorecardHtml()}
-      <div class="buttons">${nextButton}</div>`);
+      <div class="buttons">${nextButton}<button class="btn" data-act="menu">Menu</button></div>`;
+    if (!game.paused) showCard(game.doneCard);
   }, score === 1 ? 1600 : 1000);
 }
 
@@ -662,21 +672,37 @@ function showFinal() {
     </div>`);
 }
 
+// Opens from play, from the end-of-hole card or while choosing a path, and
+// Resume goes back to whichever it was.
 function showMenu() {
-  if (!['aim', 'rolling'].includes(game.mode)) return;
+  if (!game.paused) {
+    if (['aim', 'rolling'].includes(game.mode)) game.menuFrom = null;
+    else if (game.mode === 'done' && game.doneCard) game.menuFrom = 'done';
+    else if (game.mode === 'choose') game.menuFrom = 'choose';
+    else return;
+  }
   game.paused = true;
   cancelDrag();
+  $('paths').hidden = true;
+  const playing = game.menuFrom === null;
   showCard(`
     <h2>Paused</h2>
     <p class="sub">${game.onBonus ? 'Bonus island' : `Hole ${game.stage + 1}`} &middot; ${holes[game.holeIndex].name}</p>
     ${scorecardHtml()}
     <div class="buttons">
-      <button class="btn primary" data-act="resume">Resume</button>
+      <button class="btn primary" data-act="resume">${playing ? 'Resume' : 'Back'}</button>
       <button class="btn" data-act="map-browse">Course map</button>
-      <button class="btn" data-act="restart">Back to the tee</button>
+      ${playing ? '<button class="btn" data-act="restart">Back to the tee (strokes kept)</button>' : ''}
       <button class="btn" data-act="sound">Sound: ${soundOn ? 'on' : 'off'}</button>
       <button class="btn" data-act="title">Quit to title</button>
     </div>`);
+}
+
+function resumeGame() {
+  game.paused = false;
+  if (game.menuFrom === 'done') return showCard(game.doneCard);
+  hideCard();
+  if (game.menuFrom === 'choose') showPaths();
 }
 
 $('card').addEventListener('click', e => {
@@ -691,10 +717,10 @@ $('card').addEventListener('click', e => {
   else if (act === 'map') showMap();
   else if (act === 'paths') choosePath();
   else if (act === 'map-browse') showMap({ browse: true });
-  else if (act === 'menu') { game.paused = false; showMenu(); }
+  else if (act === 'menu') showMenu();
   else if (act === 'final') showFinal();
   else if (act === 'title') showTitle();
-  else if (act === 'resume') { hideCard(); game.paused = false; }
+  else if (act === 'resume') resumeGame();
   else if (act === 'restart') { hideCard(); game.paused = false; restartHole(); }
   else if (act === 'sound') {
     soundOn = !soundOn;
@@ -1128,6 +1154,7 @@ function toggleOverview(force) {
     Object.assign(world.cam.want, world.defaultView());
   }
   $('cam-view').setAttribute('aria-pressed', String(on));
+  $('cam-view-cap').textContent = on ? 'Follow' : 'Overview';
 }
 
 function faceFlag() {
@@ -1141,19 +1168,13 @@ $('cam-view').addEventListener('click', () => toggleOverview());
 $('cam-flag').addEventListener('click', faceFlag);
 $('menu-btn').addEventListener('click', showMenu);
 $('overlay').addEventListener('click', e => {
-  if (e.target === $('overlay') && game.paused) {
-    hideCard();
-    game.paused = false;
-  }
+  if (e.target === $('overlay') && game.paused) resumeGame();
 });
 
 const keys = new Set();
 window.addEventListener('keydown', e => {
   if ($('overlay').classList.contains('show')) {
-    if (e.key === 'Escape' && game.paused) {
-      hideCard();
-      game.paused = false;
-    }
+    if (e.key === 'Escape' && game.paused) resumeGame();
     return;
   }
   // Let Space and Enter press a focused on-screen button.

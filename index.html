@@ -25,19 +25,19 @@
 <div id="hud" hidden>
   <div class="row">
     <button id="menu-btn" class="chip icon" aria-label="Menu">&#9776;</button>
-    <span class="chip">Hole <b id="hud-hole">1</b>/<span id="hud-holes">9</span></span>
-    <span class="chip">Par <b id="hud-par">2</b></span>
-    <span class="chip">Strokes <b id="hud-strokes">0</b></span>
-    <span class="chip" id="hud-total-chip">Total <b id="hud-total">Even</b></span>
+    <span class="chip"><span class="lbl">Hole</span> <b id="hud-hole">1</b>/<span id="hud-holes">9</span></span>
+    <span class="chip"><span class="lbl">Par</span> <b id="hud-par">2</b></span>
+    <span class="chip"><span class="lbl">Strokes</span> <b id="hud-strokes">0</b></span>
+    <span class="chip" id="hud-total-chip"><span class="lbl">Total</span> <b id="hud-total">Even</b></span>
   </div>
   <div id="hud-name" class="chip"></div>
 </div>
 
 <div id="cam-controls" hidden>
-  <button id="cam-left" class="chip icon" aria-label="Turn camera left" title="Turn left">&#10226;</button>
-  <button id="cam-flag" class="chip icon" aria-label="Face the flag" title="Face the flag">&#9873;</button>
-  <button id="cam-view" class="chip icon" aria-label="Overview of the hole" title="Overview" aria-pressed="false">&#9638;</button>
-  <button id="cam-right" class="chip icon" aria-label="Turn camera right" title="Turn right">&#10227;</button>
+  <button id="cam-left" class="chip icon" aria-label="Turn camera left" title="Turn left (Q)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span class="cap" aria-hidden="true">Turn</span></button>
+  <button id="cam-flag" class="chip icon" aria-label="Face the flag" title="Face the flag (F)">&#9873;<span class="cap" aria-hidden="true">Flag</span></button>
+  <button id="cam-view" class="chip icon" aria-label="Overview of the hole" title="Overview (V)" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span class="cap" id="cam-view-cap" aria-hidden="true">Overview</span></button>
+  <button id="cam-right" class="chip icon" aria-label="Turn camera right" title="Turn right (E)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg><span class="cap" aria-hidden="true">Turn</span></button>
 </div>
 
 <div id="power" hidden><div id="power-fill"></div><span id="power-text">0%</span></div>

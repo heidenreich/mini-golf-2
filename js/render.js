@@ -1021,18 +1021,20 @@ export class World {
   // ---- Travelling between islands ---------------------------------------------
 
   // Flies the camera along `points` (eased) over `dur` seconds, looking ahead.
-  fly(points, dur, onDone) {
-    this.cinematic = { points, dur, t: 0, onDone };
+  // `cue` ({ t, fn }) runs fn once the flight is t seconds in.
+  fly(points, dur, onDone, cue = null) {
+    this.cinematic = { points, dur, t: 0, onDone, cue };
   }
 
-  // Off along the n-th bridge leading out of this island.
-  flyOut(n, onDone) {
+  // Off along the n-th bridge leading out of this island. onFade runs
+  // towards the end, as the camera reaches the far side.
+  flyOut(n, onDone, onFade) {
     this.viewBridges = null;
     const b = this.bridgesOut[n];
     this.cinematicLandsAtBall = false;
     if (!b) return onDone && onDone();
     const pts = [this.camera.position.clone(), ...b.path];
-    this.fly(pts, 2.2, onDone);
+    this.fly(pts, 2.2, onDone, onFade && { t: 1.5, fn: onFade });
   }
 
   // In along the bridge behind the tee, ending where the normal camera sits.
@@ -1067,6 +1069,11 @@ export class World {
     if (k.points === this.cinematic.points && this.cinematicLandsAtBall && e > 0.75) look.lerp(this.cam.target, (e - 0.75) / 0.25);
     this.camera.position.copy(pos);
     this.camera.lookAt(look);
+    if (k.cue && k.t >= k.cue.t) {
+      const fn = k.cue.fn;
+      k.cue = null;
+      fn();
+    }
     if (u >= 1) {
       const done = k.onDone;
       this.cinematic = null;
