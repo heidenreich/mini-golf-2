@@ -34,6 +34,18 @@ html, body {
   outline: none;
 }
 
+#grab {
+  position: fixed;
+  left: 0;
+  top: 0;
+  border: 2px dashed rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: grab-pulse 1.6s ease-in-out infinite;
+}
+@keyframes grab-pulse { 50% { border-color: rgba(255, 255, 255, 0.35); } }
+@media (prefers-reduced-motion: reduce) { #grab { animation: none; } }
+
 button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
 button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 .card .btn:focus-visible { outline-color: var(--accent-ink); }

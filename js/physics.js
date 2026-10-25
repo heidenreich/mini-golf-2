@@ -17,6 +17,12 @@ const SOFT_IMPACT = 0.25;             // slower hits than this don't bounce
 export const REST_SPEED = 0.05;     // slower than this counts as stopped
 const SPINNER_HALF = 0.07;
 const MOVER_HALF = 0.03;
+export const GAP_MIN_SPEED = 2.6;     // slower than this at the edge of a gap and the ball drops in
+const BUMPER_KICK = 1.4;              // bumpers add this much speed (m/s) on every hit
+export const PIPE_R = 0.24;           // warp pipe mouth
+const PIPE_MAX_SPEED = 5;             // faster balls skip over the pipe
+const PIPE_MIN_OUT = 4.4;             // the far pipe shoots the ball out at least this fast (m/s)
+const WINDMILL_GATE = 0.22;           // rad either side of straight down where a sail blocks the door
 
 // k = proportional drag (1/s), decel = rolling resistance (m/s²)
 export const SURFACES = {
@@ -49,6 +55,34 @@ export function moverState(m, t) {
   };
 }
 
+// Windmill sails turn in the plane of the front wall; sail k points at
+// angle a + k·π/2, measured from straight up, clockwise as you face it.
+export function windmillAngle(w, t) {
+  return (w.phase || 0) + (Math.PI * 2 * t) / w.period;
+}
+
+// True while a sail hangs down across the windmill's doorway.
+export function windmillBlocked(w, t) {
+  const a = windmillAngle(w, t);
+  for (let k = 0; k < 4; k++) {
+    const d = Math.atan2(Math.sin(a + (k * Math.PI) / 2 - Math.PI), Math.cos(a + (k * Math.PI) / 2 - Math.PI));
+    if (Math.abs(d) < WINDMILL_GATE) return true;
+  }
+  return false;
+}
+
+// The windmill's walls: a box with a tunnel through it along z.
+function windmillWalls(w) {
+  const x0 = w.x - w.w / 2, x1 = w.x + w.w / 2, z0 = w.z - w.d / 2, z1 = w.z + w.d / 2;
+  const t = w.door / 2;
+  return [
+    [x0, z0, w.x - t, z0], [w.x + t, z0, x1, z0],
+    [x0, z1, w.x - t, z1], [w.x + t, z1, x1, z1],
+    [x0, z0, x0, z1], [x1, z0, x1, z1],
+    [w.x - t, z0, w.x - t, z1], [w.x + t, z0, w.x + t, z1],
+  ];
+}
+
 function wallSegments(hole) {
   const segs = [];
   const pts = hole.shape;
@@ -56,7 +90,8 @@ function wallSegments(hole) {
     const [x1, z1] = pts[i], [x2, z2] = pts[(i + 1) % pts.length];
     segs.push({ x1, z1, x2, z2 });
   }
-  for (const [x1, z1, x2, z2] of hole.walls || []) segs.push({ x1, z1, x2, z2 });
+  const extra = [...(hole.walls || []), ...(hole.windmills || []).flatMap(windmillWalls)];
+  for (const [x1, z1, x2, z2] of extra) segs.push({ x1, z1, x2, z2 });
   return segs;
 }
 
@@ -73,6 +108,8 @@ export class Sim {
     this.ball = { x: hole.tee[0], z: hole.tee[1], vx: 0, vz: 0 };
     this.t = 0;
     this.restTime = 0;
+    this.air = null;    // the gap the ball is flying over, if any
+    this.warps = 0;     // counts trips through a warp pipe (for sound and effects)
   }
 
   clone() {
@@ -95,6 +132,13 @@ export class Sim {
   place(x, z) {
     Object.assign(this.ball, { x, z, vx: 0, vz: 0 });
     this.restTime = 0;
+    this.air = null;
+  }
+
+  // A gap spans the whole hole between z1 and z2.
+  gapAt(z) {
+    for (const g of this.hole.gaps || []) if (z > g.z1 && z < g.z2) return g;
+    return null;
   }
 
   shoot(angle, power) {
@@ -105,11 +149,22 @@ export class Sim {
   }
 
   // Advances one STEP. Returns null or the event that ended the roll:
-  // { type: 'cup' | 'water' | 'lost' }. Wall hits are reported through onHit.
+  // { type: 'cup' | 'water' | 'fall' | 'lost' }. Hits on rails and obstacles
+  // are reported through onHit(speed, x, z, what).
   step(onHit) {
     const b = this.ball;
     const dt = STEP;
     this.t += dt;
+
+    // Gaps: reach the edge fast enough and the ball flies across with
+    // nothing slowing it; too slow and it drops in.
+    const gap = this.gapAt(b.z);
+    if (gap && !this.air) {
+      if (Math.abs(b.vz) < GAP_MIN_SPEED) return { type: 'fall' };
+      this.air = { gap, from: b.vz > 0 ? gap.z1 : gap.z2, to: b.vz > 0 ? gap.z2 : gap.z1 };
+    } else if (!gap && this.air) {
+      this.air = null;
+    }
 
     const surf = SURFACES[this.terrain.surfaceAt(b.x, b.z)] || SURFACES.grass;
     const [gx, gz] = this.terrain.grad(b.x, b.z);
@@ -121,7 +176,7 @@ export class Sim {
     let sp = Math.hypot(b.vx, b.vz);
     // A still ball stays put while friction can hold it on this slope; only
     // obstacles move it then.
-    if (sp > 0 || slopePull > surf.decel) {
+    if (!this.air && (sp > 0 || slopePull > surf.decel)) {
       b.vx += ax * dt;
       b.vz += az * dt;
       sp = Math.hypot(b.vx, b.vz);
@@ -149,6 +204,7 @@ export class Sim {
       this.collide(onHit);
       const ev = this.checkCup(dt / n);
       if (ev) return ev;
+      this.checkPipes();
     }
 
     // Counts how long the ball has been (nearly) still. A ball held against
@@ -184,9 +240,48 @@ export class Sim {
     return null;
   }
 
+  // A ball rolling into a warp pipe comes out of the other end, heading the
+  // way that pipe faces.
+  checkPipes() {
+    const b = this.ball;
+    for (const p of this.hole.pipes || []) {
+      const [fx, fz] = p.from;
+      if (Math.hypot(b.x - fx, b.z - fz) >= PIPE_R - BALL_R * 0.3) continue;
+      const sp = Math.hypot(b.vx, b.vz);
+      if (sp > PIPE_MAX_SPEED) continue;
+      const ux = Math.sin(p.dir), uz = Math.cos(p.dir);
+      const out = Math.max(PIPE_MIN_OUT, sp * 0.85);
+      // Out beside the far pipe's stub, which is solid.
+      b.x = p.to[0] + ux * (PIPE_R + BALL_R + 0.03);
+      b.z = p.to[1] + uz * (PIPE_R + BALL_R + 0.03);
+      b.vx = ux * out;
+      b.vz = uz * out;
+      this.warps++;
+      return;
+    }
+  }
+
   collide(onHit) {
     const t = this.t;
     for (const s of this.walls) this.hitSegment(s, WALL_HALF, 0, 0, null, onHit);
+    for (const w of this.hole.windmills || []) {
+      if (!windmillBlocked(w, t)) continue;
+      // A sail hangs across the doorway, just in front of the wall.
+      const zf = w.z - w.d / 2 - 0.08;
+      const gate = this.gateSeg || (this.gateSeg = {});
+      Object.assign(gate, { x1: w.x - w.door / 2, z1: zf, x2: w.x + w.door / 2, z2: zf });
+      this.hitSegment(gate, 0.04, 0, 0, null, onHit, { what: 'sail' });
+    }
+    for (const p of this.hole.pipes || []) {
+      const seg = this.pipeSeg || (this.pipeSeg = {});
+      Object.assign(seg, { x1: p.to[0], z1: p.to[1], x2: p.to[0], z2: p.to[1] });
+      this.hitSegment(seg, PIPE_R, 0, 0, null, onHit);
+    }
+    (this.hole.bumpers || []).forEach((bp, i) => {
+      const seg = this.bumperSeg || (this.bumperSeg = {});
+      Object.assign(seg, { x1: bp.x, z1: bp.z, x2: bp.x, z2: bp.z });
+      this.hitSegment(seg, bp.r, 0, 0, null, onHit, { kick: BUMPER_KICK, what: 'bumper', index: i });
+    });
     for (const sp of this.hole.spinners || []) {
       const a = spinnerAngle(sp, t);
       const ux = Math.cos(a) * sp.len, uz = Math.sin(a) * sp.len;
@@ -206,8 +301,9 @@ export class Sim {
   }
 
   // Treats the segment as a capsule of radius `half`, moving with (svx, svz)
-  // or spinning about spinner's hub.
-  hitSegment(s, half, svx, svz, spinner, onHit) {
+  // or spinning about spinner's hub. `opts.kick` adds speed away from it
+  // (bumpers); `opts.what` names it for onHit.
+  hitSegment(s, half, svx, svz, spinner, onHit, opts) {
     const b = this.ball;
     const px = s.x2 - s.x1, pz = s.z2 - s.z1;
     const len2 = px * px + pz * pz;
@@ -240,7 +336,11 @@ export class Sim {
     const vn = rvx * nx + rvz * nz;
     if (vn >= 0) return;
     const impact = -vn;
-    if (impact < SOFT_IMPACT) {
+    if (opts && opts.kick) {
+      rvx += (-(1 + RESTITUTION) * vn + opts.kick) * nx;
+      rvz += (-(1 + RESTITUTION) * vn + opts.kick) * nz;
+      if (onHit) onHit(impact + opts.kick, b.x - nx * BALL_R, b.z - nz * BALL_R, opts);
+    } else if (impact < SOFT_IMPACT) {
       rvx -= vn * nx;
       rvz -= vn * nz;
     } else {
@@ -250,7 +350,7 @@ export class Sim {
       const vt = rvx * -nz + rvz * nx;
       rvx -= -nz * vt * 0.06;
       rvz -= nx * vt * 0.06;
-      if (onHit) onHit(impact, b.x - nx * BALL_R, b.z - nz * BALL_R);
+      if (onHit) onHit(impact, b.x - nx * BALL_R, b.z - nz * BALL_R, opts);
     }
     b.vx = rvx + svx;
     b.vz = rvz + svz;

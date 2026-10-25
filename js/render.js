@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { insidePolygon, zoneContains, smooth } from './terrain.js';
-import { BALL_R, CUP_R, WALL_HALF, spinnerAngle, moverState } from './physics.js';
+import { BALL_R, CUP_R, PIPE_R, WALL_HALF, spinnerAngle, moverState, windmillAngle } from './physics.js';
 
 // Draws a hole and everything on it. Nothing in here affects the game:
 // physics and rules live in physics.js and main.js.
@@ -293,6 +293,10 @@ export class World {
     this.buildWater(g, hole, terrain);
     this.buildCup(g, hole, terrain);
     this.buildObstacles(g, hole, terrain);
+    this.buildGaps(g, hole, terrain);
+    this.buildWindmills(g, hole, terrain);
+    this.buildBumpers(g, hole, terrain);
+    this.buildPipes(g, hole, terrain);
     this.buildScenery(g, hole, terrain, island, index);
 
     // Fit the sun's shadow to this island.
@@ -326,6 +330,10 @@ export class World {
     const col = new THREE.Color();
     const cupGreen = new THREE.Color('#86d35b');
     const zoneColor = { sand: COLORS.sand, ice: COLORS.ice, water: COLORS.pondBed };
+    // Holes cut in the fairway: the cup and warp pipe mouths, and gaps.
+    const cuts = [[cx, cz, CUP_R], ...(hole.pipes || []).map(p => [p.from[0], p.from[1], PIPE_R])];
+    const gaps = hole.gaps || [];
+    const inCut = (x, z) => cuts.some(([ux, uz, r]) => Math.hypot(x - ux, z - uz) < r) || gaps.some(gp => z > gp.z1 && z < gp.z2);
 
     for (let j = 0; j < nz; j++) {
       for (let i = 0; i < nx; i++) {
@@ -355,11 +363,17 @@ export class World {
         if (inside || edge) {
           let fx = x, fz = z;
           if (!inside) [fx, fz] = nearestOnPolygon(hole.shape, x, z).point;
-          const dc = Math.hypot(fx - cx, fz - cz);
-          if (dc < CUP_R) {
-            fx = dc > 1e-6 ? cx + ((fx - cx) * CUP_R) / dc : cx + CUP_R;
-            fz = dc > 1e-6 ? cz + ((fz - cz) * CUP_R) / dc : cz;
+          for (const [ux, uz, r] of cuts) {
+            const d = Math.hypot(fx - ux, fz - uz);
+            if (d < r) {
+              fx = d > 1e-6 ? ux + ((fx - ux) * r) / d : ux + r;
+              fz = d > 1e-6 ? uz + ((fz - uz) * r) / d : uz;
+            }
           }
+          for (const gp of gaps) {
+            if (fz > gp.z1 && fz < gp.z2) fz = fz - gp.z1 < gp.z2 - fz ? gp.z1 : gp.z2;
+          }
+          const dc = Math.hypot(fx - cx, fz - cz);
           const h = terrain.renderHeight(fx, fz);
           fairPos[k * 3] = fx;
           fairPos[k * 3 + 1] = h;
@@ -414,7 +428,7 @@ export class World {
         for (const [p, q, r, tx, tz] of tris) {
           const inside = sum === 4 ? true : sum === 0 ? false : insidePolygon(hole.shape, tx, tz);
           if (inside) {
-            if (Math.abs(tx - cx) > CUP_R + GRID || Math.abs(tz - cz) > CUP_R + GRID || Math.hypot(tx - cx, tz - cz) > CUP_R) fairIdx.push(p, q, r);
+            if (!inCut(tx, tz)) fairIdx.push(p, q, r);
           } else if (island.inside(tx, tz)) {
             roughIdx.push(p, q, r);
           }
@@ -649,6 +663,148 @@ export class World {
     });
   }
 
+  // A chasm right across the fairway, with a hazard stripe on each lip.
+  buildGaps(g, hole, terrain) {
+    const { x0, x1 } = this.bounds;
+    const dark = lambert('#4a3526', { side: THREE.DoubleSide });
+    const deep = lambert('#1d1611');
+    for (const gp of hole.gaps || []) {
+      const w = x1 - x0, mid = (x0 + x1) / 2, depth = 1.6;
+      for (const z of [gp.z1, gp.z2]) {
+        const y = terrain.height(mid, z);
+        const face = new THREE.Mesh(new THREE.PlaneGeometry(w, depth), dark);
+        face.position.set(mid, y - depth / 2, z);
+        g.add(face);
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(w - 0.1, 0.02, 0.08), lambert('#ffd23f'));
+        stripe.position.set(mid, y + 0.005, z + (z === gp.z1 ? -0.04 : 0.04));
+        g.add(stripe);
+      }
+      const yb = Math.min(terrain.height(mid, gp.z1), terrain.height(mid, gp.z2)) - depth;
+      const len = gp.z2 - gp.z1;
+      for (const x of [x0, x1]) {
+        const side = new THREE.Mesh(new THREE.PlaneGeometry(len, depth), dark);
+        side.rotation.y = Math.PI / 2;
+        side.position.set(x, yb + depth / 2, (gp.z1 + gp.z2) / 2);
+        g.add(side);
+      }
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, len), deep);
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.set(mid, yb, (gp.z1 + gp.z2) / 2);
+      g.add(floor);
+    }
+  }
+
+  // A little Dutch windmill: walls with a tunnel through, a roof, and four
+  // sails turning across the doorway.
+  buildWindmills(g, hole, terrain) {
+    this.windmills = (hole.windmills || []).map(w => {
+      const grp = new THREE.Group();
+      const y = terrain.height(w.x, w.z);
+      const H = 1.25, doorH = 0.36, t = w.door / 2;
+      const wall = lambert('#f6efe2');
+      const sideW = w.w / 2 - t;
+      for (const sx of [-1, 1]) {
+        const block = new THREE.Mesh(new THREE.BoxGeometry(sideW, H, w.d), wall);
+        block.position.set(sx * (t + sideW / 2), H / 2, 0);
+        block.castShadow = true;
+        block.receiveShadow = true;
+        grp.add(block);
+      }
+      const lintel = new THREE.Mesh(new THREE.BoxGeometry(w.door, H - doorH, w.d), wall);
+      lintel.position.set(0, doorH + (H - doorH) / 2, 0);
+      lintel.castShadow = true;
+      grp.add(lintel);
+      const tunnel = new THREE.Mesh(new THREE.BoxGeometry(w.door, doorH, w.d), lambert('#2d2a28', { side: THREE.BackSide }));
+      tunnel.position.set(0, doorH / 2, 0);
+      grp.add(tunnel);
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.hypot(w.w, w.d) / 2 + 0.08, 0.9, 4), lambert('#d9573b', { flatShading: true }));
+      roof.rotation.y = Math.PI / 4;
+      roof.position.y = H + 0.45;
+      roof.castShadow = true;
+      grp.add(roof);
+      // Sails, on a hub in front of the wall facing the tee.
+      const sails = new THREE.Group();
+      sails.position.set(0, 1.0, -w.d / 2 - 0.12);
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.12, 12), lambert('#5b3a24'));
+      hub.rotation.x = Math.PI / 2;
+      sails.add(hub);
+      for (let k = 0; k < 4; k++) {
+        const arm = new THREE.Group();
+        arm.rotation.z = (k * Math.PI) / 2;
+        const spar = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.95, 0.04), lambert('#5b3a24'));
+        spar.position.y = 0.5;
+        const cloth = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.72, 0.015), lambert(k % 2 ? '#ffffff' : '#ef476f'));
+        cloth.position.set(-0.13, 0.58, 0);
+        spar.castShadow = cloth.castShadow = true;
+        arm.add(spar, cloth);
+        sails.add(arm);
+      }
+      grp.add(sails);
+      grp.position.set(w.x, y, w.z);
+      g.add(grp);
+      return { w, sails };
+    });
+  }
+
+  buildBumpers(g, hole, terrain) {
+    this.bumpers = (hole.bumpers || []).map(bp => {
+      const grp = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({ color: '#ef476f', emissive: '#ff2e63', emissiveIntensity: 0, roughness: 0.4 });
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(bp.r, bp.r * 1.05, 0.2, 24), mat);
+      body.position.y = 0.1;
+      body.castShadow = true;
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(bp.r * 0.75, bp.r * 0.8, 0.05, 24), lambert('#ffffff'));
+      cap.position.y = 0.22;
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(bp.r, 0.025, 8, 28), lambert('#ffd23f'));
+      ring.rotation.x = Math.PI / 2;
+      ring.position.y = 0.06;
+      grp.add(body, cap, ring);
+      grp.position.set(bp.x, terrain.height(bp.x, bp.z), bp.z);
+      g.add(grp);
+      return { grp, mat, flash: 0 };
+    });
+  }
+
+  // Green warp pipes: a mouth in the ground and a stub the ball pops out of.
+  buildPipes(g, hole, terrain) {
+    const green = lambert('#2fb34a');
+    const inside = lambert('#14301b', { side: THREE.BackSide });
+    for (const p of hole.pipes || []) {
+      const [fx, fz] = p.from, [tx, tz] = p.to;
+      const yf = terrain.height(fx, fz), yt = terrain.height(tx, tz);
+      const liner = new THREE.Mesh(new THREE.CylinderGeometry(PIPE_R, PIPE_R, 0.5, 28, 1, true), inside);
+      liner.position.set(fx, yf - 0.25, fz);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(PIPE_R + 0.03, 0.045, 10, 32), green);
+      rim.rotation.x = Math.PI / 2;
+      rim.position.set(fx, yf + 0.02, fz);
+      const bottom = new THREE.Mesh(new THREE.CircleGeometry(PIPE_R, 28), lambert('#0b1a0f'));
+      bottom.rotation.x = -Math.PI / 2;
+      bottom.position.set(fx, yf - 0.48, fz);
+      g.add(liner, rim, bottom);
+
+      const stub = new THREE.Mesh(new THREE.CylinderGeometry(PIPE_R, PIPE_R, 0.28, 28), green);
+      stub.position.set(tx, yt + 0.14, tz);
+      stub.castShadow = true;
+      const lip = new THREE.Mesh(new THREE.TorusGeometry(PIPE_R + 0.02, 0.05, 10, 32), green);
+      lip.rotation.x = Math.PI / 2;
+      lip.position.set(tx, yt + 0.28, tz);
+      const top = new THREE.Mesh(new THREE.CircleGeometry(PIPE_R - 0.02, 28), lambert('#0b1a0f'));
+      top.rotation.x = -Math.PI / 2;
+      top.position.set(tx, yt + 0.285, tz);
+      g.add(stub, lip, top);
+    }
+  }
+
+  bumperHit(i) {
+    const b = this.bumpers && this.bumpers[i];
+    if (b) b.flash = 1;
+  }
+
+  warpPuff(x, z) {
+    const y = this.terrain.height(x, z) + 0.2;
+    this.burst(x, y, z, { count: 16, colors: ['#ffffff', '#9ff0a8', '#2fb34a'], speed: 1.0, up: 1.6, life: 0.6, size: 0.05, gravity: 3 });
+  }
+
   buildScenery(g, hole, terrain, island, index) {
     const rand = rng(1000 + index * 31);
     const placed = [];
@@ -840,6 +996,12 @@ export class World {
     return Math.atan2(sx, sz);
   }
 
+  // Where the ball is on screen, in CSS pixels.
+  ballScreen() {
+    SCRATCH.v.copy(this.ball.position).project(this.camera);
+    return { x: ((SCRATCH.v.x + 1) / 2) * innerWidth, y: ((1 - SCRATCH.v.y) / 2) * innerHeight };
+  }
+
   // Starting pitch and distance for the follow camera.
   defaultView() {
     const a = this.camera.aspect;
@@ -931,6 +1093,12 @@ export class World {
     }
 
     for (const { s, grp } of this.spinners) grp.rotation.y = -spinnerAngle(s, t);
+    for (const { w, sails } of this.windmills) sails.rotation.z = windmillAngle(w, t);
+    for (const b of this.bumpers) {
+      b.flash = Math.max(0, b.flash - dt * 4);
+      b.mat.emissiveIntensity = b.flash * 1.2;
+      b.grp.scale.setScalar(1 + b.flash * 0.12);
+    }
     for (const { m, block } of this.movers) {
       const st = moverState(m, t);
       block.position.set(st.x, this.terrain.height(st.x, st.z) + 0.15, st.z);

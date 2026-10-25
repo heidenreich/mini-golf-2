@@ -7,6 +7,8 @@ import { World, powerColor } from './render.js';
 const MAX_STROKES = 8;          // picked up after this many
 const SETTLE_TIME = 0.3;        // a roll ends once the ball has been still this long
 const CANCEL_PULL = 16;         // px: let go inside this and the putt is cancelled
+const GRAB_TOUCH = 80;          // px round the ball where a finger starts a putt
+const GRAB_MOUSE = 64;          // ...and a mouse; anywhere else turns the camera
 const SAVE_KEY = 'minigolf2';
 
 const $ = id => document.getElementById(id);
@@ -130,6 +132,17 @@ const sfx = {
     noise(0.12, { vol: 0.2, freq: 1800, q: 3, at: 0.08 });
     tone(420, 0.18, { vol: 0.2, type: 'triangle', at: 0.15, slide: 0.8 });
   },
+  bumper() {
+    tone(880, 0.08, { vol: 0.16, type: 'square', slide: 1.5 });
+    tone(1320, 0.1, { vol: 0.1, type: 'triangle', at: 0.04 });
+  },
+  warp() {
+    tone(300, 0.35, { vol: 0.14, type: 'triangle', slide: 3 });
+    tone(450, 0.3, { vol: 0.08, type: 'sine', at: 0.05, slide: 2.5 });
+  },
+  fall() {
+    tone(500, 0.6, { vol: 0.14, type: 'triangle', slide: 0.25 });
+  },
   splash() {
     noise(0.5, { vol: 0.35, freq: 700, q: 0.6, type: 'lowpass' });
     tone(300, 0.25, { vol: 0.08, slide: 0.4 });
@@ -248,9 +261,9 @@ function showTitle() {
       <button class="btn" data-act="sound">Sound: ${soundOn ? 'on' : 'off'}</button>
     </div>
     <ul class="how">
-      <li>Drag back from anywhere and let go to putt. Pull further for more power.</li>
+      <li>Drag back from the ball and let go to putt. Pull further for more power.</li>
+      <li>Drag anywhere else to look round. Pinch to zoom.</li>
       <li>Slopes are real: the ball curves and rolls back down hills.</li>
-      <li>Look round with two fingers (or right-drag, Q/E), or tap the overview button.</li>
     </ul>`, { clear: true });
 }
 
@@ -445,16 +458,22 @@ function onPhysicsEvent(ev) {
     const hole = holes[game.holeIndex];
     if (game.strokes <= hole.par) world.confetti(...hole.cup);
     finishHole(game.strokes);
-  } else if (ev.type === 'water') {
+  } else if (ev.type === 'water' || ev.type === 'fall') {
+    // Same penalty for both: +1 stroke, back to where you played from.
     game.mode = 'splash';
     game.timer = 1.1;
-    game.splashAt = { x: b.x, z: b.z };
+    game.splashAt = { x: b.x, z: b.z, fall: ev.type === 'fall' };
     b.vx = b.vz = 0;
-    world.splash(b.x, b.z);
-    sfx.splash();
+    if (ev.type === 'water') {
+      world.splash(b.x, b.z);
+      sfx.splash();
+      toast('Splash! +1 stroke');
+    } else {
+      sfx.fall();
+      toast('Down the gap! +1 stroke');
+    }
     game.strokes++;
     updateHud();
-    toast('Splash! +1 stroke');
   } else if (ev.type === 'lost') {
     game.sim.place(...game.lastRest);
     game.mode = 'aim';
@@ -463,7 +482,12 @@ function onPhysicsEvent(ev) {
 }
 
 let lastHitSound = 0;
-function onHit(speed) {
+function onHit(speed, x, z, what) {
+  if (what && what.what === 'bumper') {
+    world.bumperHit(what.index);
+    sfx.bumper();
+    return;
+  }
   const now = performance.now();
   if (now - lastHitSound > 60) {
     lastHitSound = now;
@@ -474,7 +498,16 @@ function onHit(speed) {
 function physicsStep() {
   const sim = game.sim;
   if (game.mode === 'aim' || game.mode === 'rolling' || game.mode === 'title') {
+    const warps = sim.warps;
     const ev = sim.step(onHit);
+    if (sim.warps !== warps && game.mode !== 'title') {
+      const p = (sim.hole.pipes || []).find(q => Math.hypot(sim.ball.x - q.to[0], sim.ball.z - q.to[1]) < 1);
+      if (p) {
+        world.warpPuff(...p.from);
+        world.warpPuff(...p.to);
+      }
+      sfx.warp();
+    }
     if (ev) {
       if (game.mode === 'title') sim.place(...holes[game.holeIndex].tee);
       else onPhysicsEvent(ev);
@@ -516,14 +549,23 @@ function placeBall(dt) {
   if (game.mode === 'splash') {
     game.timer -= dt;
     const s = game.splashAt;
-    ballPos.set(s.x, terrain.height(s.x, s.z) + BALL_R - Math.min(0.5, (1.1 - game.timer) * 0.8), s.z);
+    // Sinks into the water, or drops down the gap.
+    const sink = s.fall ? Math.min(2, 4.9 * (1.1 - game.timer) ** 2) : Math.min(0.5, (1.1 - game.timer) * 0.8);
+    ballPos.set(s.x, terrain.height(s.x, s.z) + BALL_R - sink, s.z);
     if (game.timer <= 0) {
       sim.place(...game.lastRest);
       ballReady();
     }
     return;
   }
-  ballPos.set(b.x, terrain.height(b.x, b.z) + BALL_R, b.z);
+  // Over a gap the ball flies in an arc from one lip to the other.
+  let lift = 0;
+  if (sim.air) {
+    const { from, to } = sim.air;
+    const f = Math.max(0, Math.min(1, (b.z - from) / (to - from)));
+    lift = 4 * 0.35 * f * (1 - f);
+  }
+  ballPos.set(b.x, terrain.height(b.x, b.z) + BALL_R + lift, b.z);
 }
 
 // ---- Aiming -----------------------------------------------------------------------
@@ -599,6 +641,23 @@ function resetPointers() {
   cancelDrag();
 }
 
+function nearBall(x, y, pointerType) {
+  const p = world.ballScreen();
+  return Math.hypot(x - p.x, y - p.y) <= (pointerType === 'mouse' ? GRAB_MOUSE : GRAB_TOUCH);
+}
+
+// A dashed ring round the ball while you can putt, showing where to start.
+function updateGrabRing() {
+  const ring = $('grab');
+  const show = game.mode === 'aim' && !game.paused && !drag && !orbit && !$('overlay').classList.contains('show');
+  ring.hidden = !show;
+  if (!show) return;
+  const p = world.ballScreen();
+  const r = matchMedia('(pointer: coarse)').matches ? GRAB_TOUCH : GRAB_MOUSE;
+  ring.style.width = ring.style.height = `${r * 2}px`;
+  ring.style.transform = `translate(${p.x - r}px, ${p.y - r}px)`;
+}
+
 function orbitStart() {
   const pts = [...pointers.values()];
   const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
@@ -617,12 +676,15 @@ canvas.addEventListener('pointerdown', e => {
     // Some browsers refuse capture for synthetic or already-ended pointers.
   }
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button });
-  if (pointers.size >= 2 || e.button === 2 || e.button === 1) {
+  // A drag that starts on the ball putts; anywhere else (or with two
+  // fingers, or the right mouse button) turns the camera.
+  const onBall = nearBall(e.clientX, e.clientY, e.pointerType);
+  if (pointers.size >= 2 || e.button === 2 || e.button === 1 || !onBall || game.mode !== 'aim' || game.paused) {
     cancelDrag();
     orbitStart();
     return;
   }
-  if (game.mode === 'aim' && !game.paused) {
+  {
     drag = { x: e.clientX, y: e.clientY, id: e.pointerId, pull: 0 };
     $('hint').hidden = true;
     $('toast').classList.remove('show');
@@ -845,6 +907,7 @@ function frame(now) {
   world.update(game.paused ? 0 : dt, game.sim, ballPos, ballVel);
   world.updateCamera(dt, ballPos);
   world.render();
+  updateGrabRing();
   requestAnimationFrame(frame);
 }
 

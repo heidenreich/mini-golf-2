@@ -13,21 +13,21 @@ No build step. The only dependency is [three.js](https://threejs.org/) r160, ven
 | # | Hole | Par | What's on it |
 |---|------|-----|--------------|
 | 1 | Welcome Hill | 2 | A gentle hump down the middle |
-| 2 | Up the Ramp | 2 | A ramp up to a raised green. Too soft and the ball rolls back down |
+| 2 | The Gap | 2 | Up a kicker and over a chasm. Too soft and the ball drops in (+1 stroke) |
 | 3 | Dogleg Bowl | 3 | A left-hand dogleg with a bowl in the corner that gathers the ball, then downhill to the cup |
-| 4 | Duck Pond | 3 | A pond in the middle of the fairway (+1 stroke, ball returns), a hump on the safe side and a bunker by the cup |
-| 5 | The Sweeper | 3 | Up onto a plateau with a spinning bar, then down to the cup |
+| 4 | Duck Pond | 3 | A pond in the middle of the fairway (+1 stroke, ball returns), a hump on the safe side, a bunker by the cup and pinball bumpers behind it |
+| 5 | Windmill | 3 | Through the door between the turning sails, or the long way round either side |
 | 6 | Volcano | 3 | The cup sits in a crater on top of a hill. Too soft rolls back, too hard flies over the far rim |
 | 7 | Switchback | 4 | Downhill round two corners, past a bunker, over a small ridge |
 | 8 | Island Green | 3 | Two ponds with an ice bridge between them, or a narrow path past them along either rail |
-| 9 | Grand Finale | 3 | Two sliding blocks, a ramp and a bowl round the cup |
+| 9 | Warp Finale | 3 | Two sliding blocks, or a warp pipe on the right that shoots you up the ramp into the bowl round the cup |
 
 Your best round is saved in your browser.
 
 ## Controls
 
-- **Drag back** from anywhere on the screen and release to putt, like a slingshot. Full power is a thumb-length pull. A ring round the ball and a bar at the bottom show the power, and dotted guides show how the start of the roll will curve on slopes, through one bounce off a rail. To cancel, bring your finger back to where it started (the bar says "Let go here to cancel") and let go.
-- **Look round:** two-finger drag on a phone (pinch to zoom), right-drag or the mouse wheel on a computer, Q/E on a keyboard, or the ⟲ ⟳ buttons.
+- **Drag back from the ball** and release to putt, like a slingshot. A dashed ring round the ball shows where a drag starts a putt. Full power is a thumb-length pull. A ring round the ball and a bar at the bottom show the power, and dotted guides show how the start of the roll will curve on slopes, through one bounce off a rail. To cancel, bring your finger back to where it started (the bar says "Let go here to cancel") and let go.
+- **Look round:** drag anywhere away from the ball with one finger (side to side turns, up and down tilts), pinch to zoom; on a computer, drag away from the ball or right-drag, and use the mouse wheel to zoom; Q/E on a keyboard; or the ⟲ ⟳ buttons. You can look round while the ball is rolling.
 - **⚑** turns the camera to face the flag; it also turns on its own when the ball stops with the flag well out of view. **▦** (or V) shows an overview of the whole hole, with a yellow ring round the ball.
 - **Keyboard:** arrow keys aim (left/right) and set power (up/down), Shift for fine steps, Space or Enter putts. R puts the ball back on the tee, Esc opens the menu.
 - Water costs a stroke and puts the ball back where you played from. The ball is picked up after 8 strokes.
@@ -50,7 +50,7 @@ python3 -m http.server
 |------|--------------|
 | `js/courses.js` | Every hole, as plain data |
 | `js/terrain.js` | The ground: height and slope anywhere on a hole, built from ramps, hills, ridges and tilts |
-| `js/physics.js` | Tuning constants and the ball simulation: slopes, friction, rails, spinners, sliding blocks, the cup |
+| `js/physics.js` | Tuning constants and the ball simulation: slopes, friction, rails, sliding blocks, gaps, windmills, bumpers, warp pipes, the cup |
 | `js/render.js` | Everything you see, built with three.js: ground, rails, island, water, cup and flag, obstacles, scenery, aim guide, effects, camera |
 | `js/main.js` | Game state, input, sound, screens, saving and the main loop |
 | `css/style.css` | HUD, menus and cards |
@@ -64,6 +64,9 @@ How it works:
 - **Reading slopes.** The ground is shaded by height and steepness, with contour lines every 10 cm of height on sloping ground, and the sun shines from behind the tee so slopes facing you light up.
 - **Timestep:** fixed at 240 Hz, with sub-steps of under half a ball radius so a fast ball can't pass through a rail.
 - **Cup:** a ball slower than `CUP_CAPTURE_SPEED` drops in; a faster one dips over the lip, curls and carries on.
+- **Gaps:** reach the edge moving faster than `GAP_MIN_SPEED` (across the gap) and the ball flies over with nothing slowing it, drawn in an arc; slower and it drops in.
+- **Windmills:** the building is ordinary walls with a tunnel through it. While a sail hangs within `WINDMILL_GATE` of straight down, a gate across the doorway bounces the ball back.
+- **Bumpers** bounce like rails and then add `BUMPER_KICK` of speed. **Warp pipes** take any ball slower than `PIPE_MAX_SPEED` and fire it out of the far pipe at least `PIPE_MIN_OUT` fast.
 
 Difficulty was tuned with a simulated player that picks a sensible line and then misses it by a gaussian amount: careful players (about ±3° and ±8% power) average around 22 for the round, casual players (±6°, ±15%) around 30.
 
