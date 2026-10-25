@@ -29,6 +29,7 @@ export const SURFACES = {
   grass: { k: 0.32, decel: 0.8 },
   sand:  { k: 2.6, decel: 4.2 },
   ice:   { k: 0.06, decel: 0.12 },
+  frost: { k: 0.22, decel: 0.5 },      // a frozen fairway: slick, but you can still judge it
   water: { k: 0.32, decel: 0.8 },
 };
 

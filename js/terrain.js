@@ -92,7 +92,7 @@ export function makeTerrain(hole) {
     for (let i = zones.length - 1; i >= 0; i--) {
       if (zoneContains(zones[i], x, z)) return zones[i].type;
     }
-    return 'grass';
+    return hole.surface || 'grass';
   };
 
   const renderHeight = (x, z) => {

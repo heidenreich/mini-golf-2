@@ -19,7 +19,7 @@ No build step. The only dependency is [three.js](https://threejs.org/) r160, ven
 | 5 | Windmill | 3 | Through the door between the turning sails, or the long way round either side |
 | 6 | Volcano | 3 | The cup sits in a crater on top of a hill. Too soft rolls back, too hard flies over the far rim |
 | 7 | Switchback | 4 | Downhill round two corners, past a bunker, over a small ridge |
-| 8 | Island Green | 3 | Two ponds with an ice bridge between them, or a narrow path past them along either rail |
+| 8 | Frozen Island | 3 | A snowy island where the whole fairway is frozen, so everything slides further. Two open-water ponds with an even slicker ice bridge between them, or a narrow path past them along either rail |
 | 9 | Warp Finale | 3 | Two sliding blocks, or a warp pipe on the right that shoots you up the ramp into the bowl round the cup |
 
 Your best round is saved in your browser.

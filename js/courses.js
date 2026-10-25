@@ -24,6 +24,8 @@
 //   pipes     warp pipes { from: [x, z], to: [x, z], dir }: roll in at
 //             `from`, pop out at `to` heading along dir (radians, 0 = +z)
 //   tip       shown when the hole starts
+//   surface   the fairway's surface where no zone says otherwise (default grass)
+//   theme     'winter' for snow, frost and falling snowflakes
 
 export const COURSE = {
   id: 'sky',
@@ -135,9 +137,11 @@ export const COURSE = {
       ],
     },
     {
-      name: 'Island Green',
+      name: 'Frozen Island',
       par: 3,
-      tip: 'Cross the icy bridge, or squeeze down the narrow path by a rail.',
+      tip: 'The whole island is frozen, so everything slides further. Cross the ice bridge, or squeeze down a rail.',
+      theme: 'winter',
+      surface: 'frost',
       shape: [[-3, -1], [3, -1], [3, 14], [-3, 14]],
       tee: [0, 0],
       cup: [0.8, 12.2],
@@ -145,9 +149,9 @@ export const COURSE = {
         { type: 'tilt', gx: 0.01 },
       ],
       zones: [
-        { type: 'water', x: -1.55, z: 7.6, w: 1.9, d: 4.4 },
-        { type: 'water', x: 1.55, z: 7.6, w: 1.9, d: 4.4 },
-        { type: 'ice', x: 0, z: 7.6, w: 1.1, d: 4.4, rect: true },
+        { type: 'water', x: -1.5, z: 7.6, w: 1.6, d: 3.8 },
+        { type: 'water', x: 1.5, z: 7.6, w: 1.6, d: 3.8 },
+        { type: 'ice', x: 0, z: 7.6, w: 1.4, d: 3.8, rect: true },
       ],
     },
     {

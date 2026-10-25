@@ -30,6 +30,15 @@ const COLORS = {
   skyBottom: '#d9f0ff',
 };
 
+// Ground colours for each look.
+const PALETTES = {
+  summer: { grassA: COLORS.grassA, grassB: COLORS.grassB, rough: COLORS.rough, roughDark: COLORS.roughDark, green: new THREE.Color('#86d35b') },
+  winter: {
+    grassA: new THREE.Color('#e4f4fc'), grassB: new THREE.Color('#d2eaf7'),
+    rough: new THREE.Color('#f5f9fc'), roughDark: new THREE.Color('#dde7ef'), green: new THREE.Color('#ffffff'),
+  },
+};
+
 // Small deterministic random numbers, so each hole's scenery is the same
 // every time you play it.
 function rng(seed) {
@@ -324,6 +333,8 @@ export class World {
 
     this.hole = hole;
     this.terrain = terrain;
+    this.winter = hole.theme === 'winter';
+    this.pal = PALETTES[this.winter ? 'winter' : 'summer'];
     const g = this.holeGroup = new THREE.Group();
     const b = this.bounds = bounds(hole.shape);
     const island = this.island = makeIsland(b);
@@ -340,6 +351,8 @@ export class World {
     this.buildBumpers(g, hole, terrain);
     this.buildPipes(g, hole, terrain);
     this.buildScenery(g, hole, terrain, island, index);
+    this.snow = null;
+    if (this.winter) this.buildSnow(g);
 
     // Fit the sun's shadow to this island.
     const size = Math.max(island.x1 - island.x0, island.z1 - island.z0) / 2 + 1;
@@ -370,7 +383,7 @@ export class World {
     const inPoly = new Uint8Array(nx * nz);
     const rand = rng(99);
     const col = new THREE.Color();
-    const cupGreen = new THREE.Color('#86d35b');
+    const pal = this.pal;
     const zoneColor = { sand: COLORS.sand, ice: COLORS.ice, water: COLORS.pondBed };
     // Holes cut in the fairway: the cup and warp pipe mouths, and gaps.
     const cuts = [[cx, cz, CUP_R], ...(hole.pipes || []).map(p => [p.from[0], p.from[1], PIPE_R])];
@@ -422,12 +435,12 @@ export class World {
           fairPos[k * 3 + 2] = fz;
 
           // Mown stripes, then sand, ice and pond bed painted on top.
-          col.copy(Math.floor((fz + 100) / 0.8) % 2 ? COLORS.grassA : COLORS.grassB);
+          col.copy(Math.floor((fz + 100) / 0.8) % 2 ? pal.grassA : pal.grassB);
           for (const zone of zones) {
             const t = zoneEdge(zone, fx, fz);
             if (t > 0) col.lerp(zoneColor[zone.type], t);
           }
-          if (dc < 0.75) col.lerp(cupGreen, 0.35 * (1 - dc / 0.75));
+          if (dc < 0.75) col.lerp(pal.green, 0.35 * (1 - dc / 0.75));
           // Make the ground's shape readable: higher ground lighter, steeper
           // ground darker, and contour lines every 10 cm of height.
           const [gx, gz] = terrain.grad(fx, fz);
@@ -451,7 +464,7 @@ export class World {
           roughPos[k * 3] = rx;
           roughPos[k * 3 + 1] = terrain.height(rx, rz) - ROUGH_DROP + (inside ? 0 : (rand() - 0.5) * 0.025);
           roughPos[k * 3 + 2] = rz;
-          col.copy(COLORS.rough).lerp(COLORS.roughDark, rand() * 0.6);
+          col.copy(pal.rough).lerp(pal.roughDark, rand() * 0.6);
           roughCol[k * 3] = col.r;
           roughCol[k * 3 + 1] = col.g;
           roughCol[k * 3 + 2] = col.b;
@@ -478,18 +491,22 @@ export class World {
       }
     }
 
-    const mesh = (pos, colr, idx) => {
+    const mesh = (pos, colr, idx, mat) => {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
       geo.setAttribute('color', new THREE.BufferAttribute(colr, 3));
       geo.setIndex(idx);
       geo.computeVertexNormals();
-      const m = new THREE.Mesh(geo, lambert('#ffffff', { vertexColors: true }));
+      const m = new THREE.Mesh(geo, mat);
       m.receiveShadow = true;
       return m;
     };
-    g.add(mesh(fairPos, fairCol, fairIdx));
-    g.add(mesh(roughPos, roughCol, roughIdx));
+    // A frozen fairway is glossy; grass and snow are matt.
+    const fairMat = this.winter
+      ? new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.3, metalness: 0, emissive: '#a9d4ea', emissiveIntensity: 0.22 })
+      : lambert('#ffffff', { vertexColors: true });
+    g.add(mesh(fairPos, fairCol, fairIdx, fairMat));
+    g.add(mesh(roughPos, roughCol, roughIdx, lambert('#ffffff', { vertexColors: true })));
   }
 
   // The island's crumbly underside.
@@ -504,8 +521,8 @@ export class World {
       return h;
     });
     const layers = [
-      { scale: 1, drop: 0, color: COLORS.rough },
-      { scale: 1.0, drop: 0.12, color: COLORS.roughDark },
+      { scale: 1, drop: 0, color: this.pal.rough },
+      { scale: 1.0, drop: 0.12, color: this.pal.roughDark },
       { scale: 0.97, drop: 0.5, color: COLORS.dirtTop },
       { scale: 0.82, drop: 1.4, color: COLORS.dirt },
       { scale: 0.55, drop: 2.6, color: COLORS.dirt },
@@ -842,6 +859,22 @@ export class World {
   buildIce(g, hole, terrain) {
     this.glints = [];
     const rand = rng(77);
+    const glintGeo = new THREE.OctahedronGeometry(0.035, 0);
+    const glintMat = new THREE.MeshBasicMaterial({ color: '#ffffff' });
+    const addGlint = (x, z) => {
+      const m = new THREE.Mesh(glintGeo, glintMat);
+      m.position.set(x, terrain.renderHeight(x, z) + 0.03, z);
+      g.add(m);
+      this.glints.push({ m, phase: rand() * Math.PI * 2, rate: 1.5 + rand() * 2 });
+    };
+    // A frozen fairway sparkles all over.
+    if (this.winter) {
+      const b = this.bounds;
+      for (let i = 0; i < 120; i++) {
+        const x = b.x0 + rand() * (b.x1 - b.x0), z = b.z0 + rand() * (b.z1 - b.z0);
+        if (insidePolygon(hole.shape, x, z) && terrain.surfaceAt(x, z) !== 'water') addGlint(x, z);
+      }
+    }
     for (const zone of hole.zones || []) {
       if (zone.type !== 'ice' || !zone.rect) continue;
       const nx = Math.max(2, Math.round(zone.w / 0.1)), nz = Math.max(2, Math.round(zone.d / 0.1));
@@ -868,15 +901,8 @@ export class World {
         edge.position.set(x, terrain.renderHeight(x, zone.z) + 0.015, zone.z);
         g.add(edge);
       }
-      const glintGeo = new THREE.OctahedronGeometry(0.035, 0);
-      const glintMat = new THREE.MeshBasicMaterial({ color: '#ffffff' });
       for (let i = 0; i < Math.round(zone.w * zone.d * 4); i++) {
-        const x = zone.x + (rand() - 0.5) * zone.w * 0.9, z = zone.z + (rand() - 0.5) * zone.d * 0.95;
-        const m = new THREE.Mesh(glintGeo, glintMat);
-        m.position.set(x, terrain.renderHeight(x, z) + 0.03, z);
-        m.scale.set(1, 0.3, 1);
-        g.add(m);
-        this.glints.push({ m, phase: rand() * Math.PI * 2, rate: 1.5 + rand() * 2 });
+        addGlint(zone.x + (rand() - 0.5) * zone.w * 0.9, zone.z + (rand() - 0.5) * zone.d * 0.95);
       }
     }
   }
@@ -915,12 +941,13 @@ export class World {
       let obj;
       const r = rand();
       // Keep tall things away from the rails so they don't block the view.
-      if (edge > 1.1 && r < 0.55) obj = this.makeTree(rand);
-      else if (r < 0.8) obj = this.makeBush(rand);
+      if (edge > 1.1 && r < 0.55) obj = this.winter ? this.makeSnowyPine(rand) : this.makeTree(rand);
+      else if (r < 0.8) obj = this.winter ? this.makeSnowdrift(rand) : this.makeBush(rand);
       else obj = this.makeRock(rand);
       obj.position.set(x, y, z);
       g.add(obj);
     }
+    if (this.winter) return;
     // A few flowers dotted around the rough.
     const petals = ['#ffffff', '#ffd23f', '#ff8fab', '#b39cff'];
     const flowerGeo = new THREE.IcosahedronGeometry(0.04, 0);
@@ -933,6 +960,70 @@ export class World {
       f.position.set(x, terrain.height(x, z) - ROUGH_DROP + 0.03, z);
       g.add(f);
     }
+  }
+
+  makeSnowyPine(rand) {
+    const g = new THREE.Group();
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.4, 6), lambert('#6e4a2c', { flatShading: true }));
+    trunk.position.y = 0.2;
+    g.add(trunk);
+    const green = lambert(['#2f6b45', '#2a5e3d', '#3a7a50'][Math.floor(rand() * 3)], { flatShading: true });
+    const snow = lambert('#f7fbff', { flatShading: true });
+    for (let i = 0; i < 3; i++) {
+      const r = 0.42 - i * 0.1;
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(r, 0.55, 7), green);
+      cone.position.y = 0.45 + i * 0.3;
+      cone.castShadow = true;
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(r * 0.62, 0.3, 7), snow);
+      cap.position.y = 0.59 + i * 0.3;
+      g.add(cone, cap);
+    }
+    g.scale.setScalar(0.75 + rand() * 0.6);
+    g.rotation.y = rand() * Math.PI * 2;
+    return g;
+  }
+
+  makeSnowdrift(rand) {
+    const g = new THREE.Group();
+    const mat = lambert('#f3f8fc', { flatShading: true });
+    for (let i = 0; i < 2 + Math.floor(rand() * 2); i++) {
+      const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.2 + rand() * 0.1, 0), mat);
+      m.position.set((rand() - 0.5) * 0.35, 0.05, (rand() - 0.5) * 0.35);
+      m.scale.y = 0.55;
+      m.castShadow = true;
+      g.add(m);
+    }
+    return g;
+  }
+
+  // Snowflakes drifting down over a winter island.
+  buildSnow(g) {
+    const isl = this.island, N = 450;
+    const pos = new Float32Array(N * 3);
+    const rand = rng(31);
+    for (let i = 0; i < N; i++) {
+      pos[i * 3] = isl.x0 - 2 + rand() * (isl.x1 - isl.x0 + 4);
+      pos[i * 3 + 1] = -1 + rand() * 7;
+      pos[i * 3 + 2] = isl.z0 - 2 + rand() * (isl.z1 - isl.z0 + 4);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    // Round, soft-edged flakes rather than square points.
+    const c = document.createElement('canvas');
+    c.width = c.height = 32;
+    const ctx = c.getContext('2d');
+    const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.6, 'rgba(255,255,255,0.8)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 32, 32);
+    const flake = new THREE.CanvasTexture(c);
+    this.snow = new THREE.Points(geo, new THREE.PointsMaterial({
+      map: flake, size: 0.07, transparent: true, opacity: 0.95, depthWrite: false,
+    }));
+    this.snow.frustumCulled = false;
+    g.add(this.snow);
   }
 
   makeBush(rand) {
@@ -1209,6 +1300,17 @@ export class World {
     }
     pos.needsUpdate = true;
 
+    if (this.snow && !reduceMotion) {
+      const p = this.snow.geometry.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        let y = p.getY(i) - dt * (0.35 + (i % 5) * 0.06);
+        if (y < -1) y += 7;
+        p.setY(i, y);
+        p.setX(i, p.getX(i) + Math.sin(this.time * 0.8 + i) * dt * 0.08);
+      }
+      p.needsUpdate = true;
+    }
+
     for (const gl of this.glints) {
       const s = Math.pow(Math.max(0, Math.sin(this.time * gl.rate + gl.phase)), 12);
       gl.m.scale.set(s, s * 0.3, s);
@@ -1246,6 +1348,7 @@ export class World {
 }
 
 const SCRATCH = { v: new THREE.Vector3(), q: new THREE.Quaternion(), m: new THREE.Matrix4() };
+const reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // 0..1 across the edge of a zone, for painting.
 function zoneEdge(zone, x, z) {

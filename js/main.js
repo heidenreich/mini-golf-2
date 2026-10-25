@@ -563,7 +563,8 @@ function placeBall(dt) {
     return;
   }
   // Frost and a faint hiss behind a ball sliding on ice.
-  if (game.mode === 'rolling' && sim.speed > 0.3 && terrain.surfaceAt(b.x, b.z) === 'ice') {
+  const surface = terrain.surfaceAt(b.x, b.z);
+  if (game.mode === 'rolling' && sim.speed > 0.3 && (surface === 'ice' || surface === 'frost')) {
     frostTimer -= dt;
     if (frostTimer <= 0) {
       frostTimer = 0.07;
