@@ -1,33 +1,16 @@
-import { Vector3 } from '../vendor/three.module.min.js';
-import { COURSE, MAP } from './courses.js';
+// The flow of a round: title, holes, choosing a path, travelling between
+// islands, menus and the main loop.
+import { MAP, COURSE } from './courses.js';
 import { THEMES } from './themes.js';
-import { makeTerrain, smooth } from './terrain.js';
-import { Sim, STEP, BALL_R, REST_SPEED } from './physics.js';
-import { World, powerColor } from './render.js';
-
-const MAX_STROKES = 8;          // picked up after this many
-const SETTLE_TIME = 0.3;        // a roll ends once the ball has been still this long
-const CANCEL_PULL = 16;         // px: let go inside this and the putt is cancelled
-const GRAB_TOUCH = 80;          // px round the ball where a finger starts a putt
-const GRAB_MOUSE = 64;          // ...and a mouse; anywhere else turns the camera
-const SAVE_KEY = 'minigolf2';
-
-const $ = id => document.getElementById(id);
-const canvas = $('game');
-let world;
-try {
-  world = new World(canvas);
-} catch (err) {
-  document.getElementById('card').innerHTML = `<h2>Mini Golf 2 can't run here</h2>
-    <p>It needs WebGL, which this browser has turned off or doesn't support.
-    Try another browser, or turn on hardware acceleration in this one's settings.</p>`;
-  document.getElementById('overlay').classList.add('show');
-  throw err;
-}
-const holes = COURSE.holes;
-const STAGES = MAP.stages.length;
-const ROUND_KEY = 'minigolf2-round';
-const ROUND_TTL = 7 * 24 * 3600 * 1000;  // a round left this long starts afresh
+import { makeTerrain } from './terrain.js';
+import { Sim, STEP } from './physics.js';
+import { $, canvas, world, holes, STAGES, MAX_STROKES, game, nextChoices, totals } from './state.js';
+import { load, save, saveRound, savedRound, clearRound } from './storage.js';
+import { ac, sfx, soundIsOn, setSound } from './audio.js';
+import { toast, relName, scoreWord, updateHud, scorecardHtml, fade, bestText, showCard, hideCard, setPlaying } from './ui.js';
+import { mapSvg } from './map.js';
+import { shoot, pickUp, physicsStep, ballPos, ballVel, placeBall } from './play.js';
+import { cancelDrag, updateGrabRing, handleKeys, refreshAim } from './input.js';
 
 // If the phone drops the 3D view (it can under memory pressure), say so and
 // offer a reload; the round is saved, so it carries on from this island.
@@ -38,298 +21,6 @@ canvas.addEventListener('webglcontextlost', e => {
     <div class="buttons"><button class="btn primary" onclick="location.reload()">Reload</button></div>`;
   document.getElementById('overlay').classList.add('show');
 });
-
-const game = {
-  mode: 'title',        // title | aim | rolling | splash | done | travel | final
-  holeIndex: 0,
-  strokes: 0,
-  route: [],            // holes played this round: { hole, stage, score }
-  stage: 0,             // the stage being played (the bonus island keeps the stage before it)
-  onBonus: false,
-  bonusPlayed: false,
-  links: [],            // where the bridges off this island lead: { hole, kind }
-  sim: null,
-  terrain: null,
-  lastRest: [0, 0],
-  aim: { angle: 0, power: 0, keyboard: false },
-  timer: 0,
-  sink: null,
-  paused: false,
-  menuFrom: null,       // where the pause menu was opened: null (playing) | 'done' | 'choose'
-  doneCard: '',         // the end-of-hole card, to go back to from the menu
-};
-
-// ---- Saving -----------------------------------------------------------------
-
-// Only trusts what it expects, so stray data in storage can't break the game.
-function load() {
-  try {
-    const d = JSON.parse(localStorage.getItem(SAVE_KEY));
-    if (!d || typeof d !== 'object' || Array.isArray(d)) return {};
-    if (!Number.isFinite(d.best)) delete d.best;
-    return d;
-  } catch {
-    return {};
-  }
-}
-
-function save(data) {
-  try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-  } catch {
-    // Private mode or storage blocked: scores just aren't kept.
-  }
-}
-
-const saved = load();
-let soundOn = saved.sound !== false;
-
-// ---- Sound --------------------------------------------------------------------
-
-let audio = null;
-
-function ac() {
-  if (!soundOn) return null;
-  if (!audio) {
-    try {
-      audio = new (window.AudioContext || window.webkitAudioContext)();
-    } catch {
-      return null;
-    }
-  }
-  if (audio.state !== 'running') audio.resume().catch(() => {});
-  return audio;
-}
-
-function tone(freq, dur, { type = 'sine', vol = 0.2, at = 0, slide = 0 } = {}) {
-  const a = ac();
-  if (!a) return;
-  const t = a.currentTime + at;
-  const o = a.createOscillator(), g = a.createGain();
-  o.type = type;
-  o.frequency.setValueAtTime(freq, t);
-  if (slide) o.frequency.exponentialRampToValueAtTime(freq * slide, t + dur);
-  g.gain.setValueAtTime(vol, t);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g).connect(a.destination);
-  o.start(t);
-  o.stop(t + dur + 0.02);
-}
-
-function noise(dur, { vol = 0.2, freq = 1200, q = 1, at = 0, type = 'bandpass' } = {}) {
-  const a = ac();
-  if (!a) return;
-  const t = a.currentTime + at;
-  const len = Math.ceil(a.sampleRate * dur);
-  const buf = a.createBuffer(1, len, a.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
-  const src = a.createBufferSource();
-  src.buffer = buf;
-  const f = a.createBiquadFilter();
-  f.type = type;
-  f.frequency.value = freq;
-  f.Q.value = q;
-  const g = a.createGain();
-  g.gain.value = vol;
-  src.connect(f).connect(g).connect(a.destination);
-  src.start(t);
-}
-
-const sfx = {
-  putt(p) {
-    noise(0.05, { vol: 0.25 + p * 0.3, freq: 2600, q: 2 });
-    tone(950, 0.06, { vol: 0.12 + p * 0.1, type: 'triangle' });
-  },
-  hit(speed) {
-    const v = Math.min(1, speed / 6);
-    tone(180 + v * 120, 0.09, { vol: 0.08 + v * 0.25, type: 'triangle', slide: 0.6 });
-    noise(0.04, { vol: 0.08 + v * 0.15, freq: 900, q: 1 });
-  },
-  cup() {
-    tone(640, 0.12, { vol: 0.2, type: 'triangle', slide: 0.7 });
-    noise(0.12, { vol: 0.2, freq: 1800, q: 3, at: 0.08 });
-    tone(420, 0.18, { vol: 0.2, type: 'triangle', at: 0.15, slide: 0.8 });
-  },
-  bumper() {
-    tone(880, 0.08, { vol: 0.16, type: 'square', slide: 1.5 });
-    tone(1320, 0.1, { vol: 0.1, type: 'triangle', at: 0.04 });
-  },
-  warp() {
-    tone(300, 0.35, { vol: 0.14, type: 'triangle', slide: 3 });
-    tone(450, 0.3, { vol: 0.08, type: 'sine', at: 0.05, slide: 2.5 });
-  },
-  ice(speed) {
-    noise(0.28, { vol: Math.min(0.08, 0.02 + speed * 0.012), freq: 6000, q: 0.7, type: 'highpass' });
-  },
-  firework() {
-    noise(0.35, { vol: 0.12, freq: 900, q: 0.5, type: 'lowpass' });
-    tone(1600 + Math.random() * 800, 0.25, { vol: 0.05, type: 'triangle', slide: 0.5 });
-  },
-  fall() {
-    tone(500, 0.6, { vol: 0.14, type: 'triangle', slide: 0.25 });
-  },
-  splash() {
-    noise(0.5, { vol: 0.35, freq: 700, q: 0.6, type: 'lowpass' });
-    tone(300, 0.25, { vol: 0.08, slide: 0.4 });
-  },
-  cheer(level) {
-    const notes = [523, 659, 784, 1047, 1319];
-    const n = Math.min(notes.length, 2 + level);
-    for (let i = 0; i < n; i++) tone(notes[i], 0.22, { vol: 0.14, type: 'triangle', at: i * 0.09 });
-  },
-};
-
-// ---- UI helpers ----------------------------------------------------------------
-
-let toastTimer = 0;
-function toast(html, ms = 2200) {
-  const el = $('toast');
-  el.innerHTML = html;
-  el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), ms);
-}
-
-function relName(diff) {
-  return diff === 0 ? 'Even' : diff > 0 ? `+${diff}` : `${diff}`;
-}
-
-function scoreWord(strokes, par) {
-  if (strokes === 1) return 'Hole in one!';
-  const d = strokes - par;
-  return { '-3': 'Albatross!', '-2': 'Eagle!', '-1': 'Birdie!', 0: 'Par', 1: 'Bogey', 2: 'Double bogey', 3: 'Triple bogey' }[d] || `${relName(d)}`;
-}
-
-function totals() {
-  let strokes = 0, par = 0;
-  for (const r of game.route) {
-    if (r.score == null) continue;
-    strokes += r.score;
-    par += holes[r.hole].par;
-  }
-  return { strokes, par, diff: strokes - par };
-}
-
-function updateHud() {
-  const hole = holes[game.holeIndex];
-  $('hud-hole').textContent = game.onBonus ? '\u2605' : game.stage + 1;
-  $('hud-holes').textContent = STAGES;
-  $('hud-par').textContent = hole.par;
-  $('hud-strokes').textContent = Math.min(game.strokes, MAX_STROKES);
-  $('hud-name').textContent = hole.name;
-  const t = totals();
-  $('hud-total').textContent = relName(t.diff);
-  const chip = $('hud-total-chip');
-  chip.classList.toggle('under', t.diff < 0);
-  chip.classList.toggle('over', t.diff > 0);
-}
-
-// One column per stage, plus the bonus island if you went there.
-function scorecardHtml() {
-  const played = stage => game.route.find(r => r.stage === stage && !r.bonus);
-  const bonus = game.route.find(r => r.bonus);
-  const cols = MAP.stages.map((opts, i) => {
-    const r = played(i);
-    const pars = [...new Set(opts.map(h => holes[h].par))];
-    const par = r ? holes[r.hole].par : pars.join('/');
-    const current = !game.onBonus && i === game.stage && game.mode !== 'final';
-    let cell = '&middot;', cls = '';
-    if (r && r.score != null) {
-      const d = r.score - holes[r.hole].par;
-      cell = r.score;
-      cls = d < 0 ? 'under' : d > 0 ? 'over' : '';
-    }
-    return { head: i + 1, par, cell, cls: `${cls} ${current ? 'current' : ''}` };
-  });
-  if (bonus) {
-    const d = bonus.score == null ? 0 : bonus.score - holes[bonus.hole].par;
-    cols.push({ head: '\u2605', par: holes[bonus.hole].par, cell: bonus.score ?? '&middot;', cls: `${d < 0 ? 'under' : d > 0 ? 'over' : ''} ${game.onBonus && game.mode !== 'final' ? 'current' : ''}` });
-  }
-  const t = totals();
-  return `<table class="scorecard">
-    <tr><th>Hole</th>${cols.map(c => `<th>${c.head}</th>`).join('')}<th>Tot</th></tr>
-    <tr><th>Par</th>${cols.map(c => `<td>${c.par}</td>`).join('')}<td>${t.par || '&middot;'}</td></tr>
-    <tr><th>You</th>${cols.map(c => `<td class="${c.cls}">${c.cell}</td>`).join('')}<td><b>${t.strokes || '&middot;'}</b></td></tr>
-  </table>`;
-}
-
-// ---- The course map -------------------------------------------------------------
-
-const MAP_W = 340, ROW = 64, TOP = 34;
-// Where each island sits on the map: stage by stage down the page, with
-// the bonus island off to the side.
-function mapSpot(hole) {
-  if (hole === MAP.bonus.hole) return { x: MAP_W - 40, y: TOP + ROW * 3.5 };
-  const stage = MAP.stages.findIndex(opts => opts.includes(hole));
-  const opts = MAP.stages[stage];
-  const x = opts.length === 1 ? 150 : opts.indexOf(hole) === 0 ? 88 : 212;
-  return { x, y: TOP + ROW * stage };
-}
-
-function islandColors(hole) {
-  const g = (THEMES[holes[hole].theme] || THEMES.meadow).ground;
-  return { fill: `#${g.grassA.getHexString()}`, rim: `#${g.rough.getHexString()}` };
-}
-
-// choices: [{ hole, kind }] islands you can go to next (tappable).
-function mapSvg(choices = []) {
-  const visited = new Map(game.route.map(r => [r.hole, r]));
-  const choiceOf = new Map(choices.map(c => [c.hole, c]));
-  const lines = [];
-  const line = (a, b, cls) => {
-    const p = mapSpot(a), q = mapSpot(b);
-    const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2 + 8;
-    lines.push(`<path class="${cls}" d="M${p.x},${p.y} Q${mx},${my} ${q.x},${q.y}"/>`);
-  };
-  const order = game.route.map(r => r.hole);
-  const took = (a, b) => order.some((h, i) => h === a && order[i + 1] === b);
-  for (let s = 0; s < STAGES - 1; s++) {
-    for (const a of MAP.stages[s]) for (const b of MAP.stages[s + 1]) line(a, b, took(a, b) ? 'bridge taken' : 'bridge');
-  }
-  for (const s of MAP.bonus.from) {
-    for (const a of MAP.stages[s]) {
-      const open = choiceOf.get(MAP.bonus.hole) && game.holeIndex === a;
-      line(a, MAP.bonus.hole, `bridge gold ${took(a, MAP.bonus.hole) ? 'taken' : open ? 'open' : ''}`);
-    }
-  }
-  const nodes = holes.map((h, i) => {
-    const { x, y } = mapSpot(i);
-    const c = islandColors(i);
-    const v = visited.get(i);
-    const choice = choiceOf.get(i);
-    const here = i === game.holeIndex && game.mode !== 'title';
-    const score = v && v.score != null ? v.score : '';
-    const d = v && v.score != null ? v.score - h.par : 0;
-    const bonus = i === MAP.bonus.hole;
-    const locked = bonus && !choice && !visited.has(i);
-    const cls = ['island', choice ? 'choice' : '', v ? 'visited' : '', here ? 'here' : '', locked ? 'locked' : '', d < 0 ? 'under' : d > 0 ? 'over' : ''].join(' ');
-    const attrs = choice ? ` data-go="${i}" role="button" tabindex="0" aria-label="Go to ${h.name}, par ${h.par}"` : '';
-    return `<g class="${cls}" transform="translate(${x},${y})"${attrs}>
-      <ellipse class="halo" rx="27" ry="21"/>
-      <ellipse rx="21" ry="15" fill="${c.rim}"/>
-      <ellipse rx="15" ry="10" cy="-1" fill="${c.fill}"/>
-      ${score !== '' ? `<text class="score" y="4">${score}</text>` : locked ? '<text class="lock" y="5">\u{1F512}</text>' : ''}
-      <text class="name" y="31">${h.name}</text>
-      <text class="par" y="44">Par ${h.par}${bonus ? ' \u00b7 bonus' : ''}</text>
-    </g>`;
-  });
-  const H = TOP + ROW * (STAGES - 1) + 52;
-  return `<svg class="map" viewBox="0 0 ${MAP_W} ${H}" role="img" aria-label="Course map">${lines.join('')}${nodes.join('')}</svg>`;
-}
-
-// Where you can go after the hole you're on.
-function nextChoices() {
-  const out = [];
-  const nextStage = game.stage + 1;
-  if (nextStage < STAGES) for (const h of MAP.stages[nextStage]) out.push({ hole: h, kind: 'next' });
-  if (!game.onBonus && !game.bonusPlayed && MAP.bonus.from.includes(game.stage)) {
-    const r = game.route[game.route.length - 1];
-    const birdie = r && r.hole === game.holeIndex && r.score != null && r.score < holes[r.hole].par;
-    out.push({ hole: MAP.bonus.hole, kind: birdie ? 'gold' : 'locked' });
-  }
-  return out;
-}
 
 function showMap({ browse = false } = {}) {
   const choices = browse ? [] : nextChoices().filter(c => c.kind !== 'locked');
@@ -409,10 +100,6 @@ $('paths').addEventListener('click', e => {
 
 // ---- Travelling ----------------------------------------------------------------------
 
-function fade(on) {
-  $('fade').classList.toggle('on', on);
-}
-
 // Off along this island's bridge to `hole`, then in along the next one's.
 function travelTo(hole) {
   const n = game.links.findIndex(l => l.hole === hole);
@@ -450,44 +137,6 @@ function enterHole(hole) {
   });
 }
 
-// ---- Saving the round in progress -------------------------------------------------
-
-// Where you are in the round, so a reload can pick it up again. It goes in
-// localStorage rather than sessionStorage: phones close installed apps in the
-// background, and that throws sessionStorage away.
-function saveRound() {
-  if (game.mode === 'title') return;
-  try {
-    localStorage.setItem(ROUND_KEY, JSON.stringify({
-      hole: game.holeIndex, stage: game.stage, onBonus: game.onBonus, bonusPlayed: game.bonusPlayed,
-      route: game.route.filter(r => r.score != null),
-      at: Date.now(),
-    }));
-  } catch {
-    // Storage blocked: a reload just starts a new round.
-  }
-}
-
-function savedRound() {
-  try {
-    const r = JSON.parse(localStorage.getItem(ROUND_KEY));
-    if (!r || !holes[r.hole] || !Array.isArray(r.route)) return null;
-    if (!Number.isFinite(r.at) || Date.now() - r.at > ROUND_TTL) return null;
-    if (!r.route.every(q => holes[q.hole] && Number.isFinite(q.score))) return null;
-    return r;
-  } catch {
-    return null;
-  }
-}
-
-function clearRound() {
-  try {
-    localStorage.removeItem(ROUND_KEY);
-  } catch {
-    // Nothing to clear.
-  }
-}
-
 function resumeRound() {
   const r = savedRound();
   if (!r) return startRound();
@@ -497,38 +146,6 @@ function resumeRound() {
   game.bonusPlayed = r.bonusPlayed;
   hideCard();
   enterHole(r.hole);
-}
-
-// ---- Saving the best round -----------------------------------------------------------
-
-function bestText(data) {
-  if (!Number.isFinite(data.bestToPar)) return '';
-  return `Best round: <b>${relName(data.bestToPar)}</b>${Number.isFinite(data.best) ? ` (${data.best} strokes)` : ''}`;
-}
-
-// While a card is up, the game controls behind it are out of reach.
-function setInert(on) {
-  for (const id of ['hud', 'cam-controls', 'game']) $(id).inert = on;
-}
-
-function showCard(html, { clear = false } = {}) {
-  $('card').innerHTML = html;
-  const ov = $('overlay');
-  ov.classList.add('show');
-  ov.classList.toggle('clear', clear);
-  setInert(true);
-  const first = $('card').querySelector('button');
-  if (first) first.focus({ preventScroll: true });
-}
-
-function hideCard() {
-  $('overlay').classList.remove('show');
-  setInert(false);
-}
-
-function setPlaying(on) {
-  $('hud').hidden = !on;
-  $('cam-controls').hidden = !on;
 }
 
 // ---- Screens ---------------------------------------------------------------------
@@ -557,7 +174,7 @@ function showTitle() {
     <div class="buttons">
       ${resume ? `<button class="btn primary" data-act="resume-round">Continue round (${resume.onBonus ? 'bonus island' : `hole ${resume.stage + 1}`}: ${holes[resume.hole].name})</button>` : ''}
       <button class="btn ${resume ? '' : 'primary'}" data-act="play">${resume ? 'New round' : 'Play'}</button>
-      <button class="btn" data-act="sound">Sound: ${soundOn ? 'on' : 'off'}</button>
+      <button class="btn" data-act="sound">Sound: ${soundIsOn() ? 'on' : 'off'}</button>
     </div>
     <ul class="how">
       <li>Drag back from the ball and let go to putt. Pull further for more power.</li>
@@ -611,7 +228,7 @@ function startHole(i, { quiet = false, keepStrokes = false } = {}) {
   }
 }
 
-function finishHole(score, note = '') {
+export function finishHole(score, note = '') {
   const r = game.route.find(q => q.hole === game.holeIndex);
   if (r) r.score = score;
   game.mode = 'done';
@@ -674,7 +291,7 @@ function showFinal() {
 
 // Opens from play, from the end-of-hole card or while choosing a path, and
 // Resume goes back to whichever it was.
-function showMenu() {
+export function showMenu() {
   if (!game.paused) {
     if (['aim', 'rolling'].includes(game.mode)) game.menuFrom = null;
     else if (game.mode === 'done' && game.doneCard) game.menuFrom = 'done';
@@ -693,12 +310,12 @@ function showMenu() {
       <button class="btn primary" data-act="resume">${playing ? 'Resume' : 'Back'}</button>
       <button class="btn" data-act="map-browse">Course map</button>
       ${playing ? '<button class="btn" data-act="restart">Back to the tee (strokes kept)</button>' : ''}
-      <button class="btn" data-act="sound">Sound: ${soundOn ? 'on' : 'off'}</button>
+      <button class="btn" data-act="sound">Sound: ${soundIsOn() ? 'on' : 'off'}</button>
       <button class="btn" data-act="title">Quit to title</button>
     </div>`);
 }
 
-function resumeGame() {
+export function resumeGame() {
   game.paused = false;
   if (game.menuFrom === 'done') return showCard(game.doneCard);
   hideCard();
@@ -723,11 +340,8 @@ $('card').addEventListener('click', e => {
   else if (act === 'resume') resumeGame();
   else if (act === 'restart') { hideCard(); game.paused = false; restartHole(); }
   else if (act === 'sound') {
-    soundOn = !soundOn;
-    const data = load();
-    data.sound = soundOn;
-    save(data);
-    btn.textContent = `Sound: ${soundOn ? 'on' : 'off'}`;
+    setSound(!soundIsOn());
+    btn.textContent = `Sound: ${soundIsOn() ? 'on' : 'off'}`;
   }
 });
 // Map islands are SVG, so Enter and Space need wiring up by hand.
@@ -741,504 +355,12 @@ $('card').addEventListener('keydown', e => {
 
 // Puts the ball back on the tee. Strokes so far still count, so it's a
 // way out of a bad spot rather than a free do-over.
-function restartHole() {
+export function restartHole() {
   if (game.mode !== 'aim' && game.mode !== 'rolling') return;
   game.paused = false;
   hideCard();
   startHole(game.holeIndex, { quiet: true, keepStrokes: true });
   if (game.strokes >= MAX_STROKES) pickUp();
-}
-
-// ---- Shots ------------------------------------------------------------------------
-
-function shoot(angle, power) {
-  if (game.mode !== 'aim' || game.paused || game.sim.moving) return;
-  game.lastRest = [game.sim.ball.x, game.sim.ball.z];
-  game.sim.shoot(angle, power);
-  game.strokes++;
-  game.mode = 'rolling';
-  game.aim.power = 0;
-  game.aim.keyboard = false;
-  world.hideAim();
-  $('power').hidden = true;
-  $('hint').hidden = true;
-  sfx.putt(power);
-  updateHud();
-}
-
-function pickUp() {
-  finishHole(MAX_STROKES, 'Picked up');
-  toast(`Picked up after ${MAX_STROKES} strokes`);
-}
-
-// The ball is still again (after a putt, a splash or a knock).
-function ballReady() {
-  game.mode = 'aim';
-  game.lastRest = [game.sim.ball.x, game.sim.ball.z];
-  if (game.strokes >= MAX_STROKES) return pickUp();
-  if (game.strokes === MAX_STROKES - 1) toast('Last stroke before the ball is picked up');
-  // Turn to face down the hole if the view has drifted well off it.
-  const yaw = lookYaw();
-  if (yaw === null || world.cam.overview) return;
-  const off = Math.atan2(Math.sin(yaw - world.cam.want.yaw), Math.cos(yaw - world.cam.want.yaw));
-  if (Math.abs(off) > Math.PI / 5) world.cam.want.yaw = yaw;
-}
-
-// Direction to the furthest point along the hole (its route round any
-// corners, then the cup) that the ball can see without a rail in the way.
-// Null when none is in sight.
-function lookYaw() {
-  const hole = holes[game.holeIndex];
-  const { x, z } = game.sim.ball;
-  const targets = [...(hole.route || []), hole.cup];
-  for (let i = targets.length - 1; i >= 0; i--) {
-    const [tx, tz] = targets[i];
-    if (Math.hypot(tx - x, tz - z) < 0.5) continue;
-    if (game.sim.walls.every(w => !segmentsCross(x, z, tx, tz, w))) return Math.atan2(tx - x, tz - z);
-  }
-  return null;
-}
-
-function segmentsCross(ax, az, bx, bz, w) {
-  const side = (px, pz, qx, qz, rx, rz) => (qx - px) * (rz - pz) - (qz - pz) * (rx - px);
-  const d1 = side(w.x1, w.z1, w.x2, w.z2, ax, az), d2 = side(w.x1, w.z1, w.x2, w.z2, bx, bz);
-  const d3 = side(ax, az, bx, bz, w.x1, w.z1), d4 = side(ax, az, bx, bz, w.x2, w.z2);
-  return d1 * d2 < 0 && d3 * d4 < 0;
-}
-
-function onPhysicsEvent(ev) {
-  const b = game.sim.ball;
-  if (ev.type === 'cup') {
-    game.sink = { x: b.x, z: b.z, t: 0 };
-    b.vx = b.vz = 0;
-    sfx.cup();
-    const hole = holes[game.holeIndex];
-    if (game.strokes <= hole.par) world.confetti(...hole.cup);
-    if (hole.theme === 'night') world.fireworks(...hole.cup);
-    finishHole(game.strokes);
-  } else if (ev.type === 'water' || ev.type === 'fall') {
-    // Same penalty for both: +1 stroke, back to where you played from.
-    game.mode = 'splash';
-    game.timer = 1.1;
-    game.splashAt = { x: b.x, z: b.z, fall: ev.type === 'fall' };
-    b.vx = b.vz = 0;
-    if (ev.type === 'water') {
-      world.splash(b.x, b.z);
-      sfx.splash();
-      toast('Splash! +1 stroke');
-    } else {
-      sfx.fall();
-      toast('Down the gap! +1 stroke');
-    }
-    game.strokes++;
-    updateHud();
-  } else if (ev.type === 'lost') {
-    game.sim.place(...game.lastRest);
-    game.mode = 'aim';
-    toast('Out of bounds: back you go');
-  }
-}
-
-world.onFirework = () => sfx.firework();
-
-let lastHitSound = 0;
-function onHit(speed, x, z, what) {
-  if (what && what.what === 'bumper') {
-    world.bumperHit(what.index);
-    sfx.bumper();
-    return;
-  }
-  const now = performance.now();
-  if (now - lastHitSound > 60) {
-    lastHitSound = now;
-    sfx.hit(speed);
-  }
-}
-
-function physicsStep() {
-  const sim = game.sim;
-  if (game.mode === 'aim' || game.mode === 'rolling' || game.mode === 'title') {
-    const warps = sim.warps;
-    const ev = sim.step(onHit);
-    if (sim.warps !== warps && game.mode !== 'title') {
-      const p = (sim.hole.pipes || []).find(q => Math.hypot(sim.ball.x - q.to[0], sim.ball.z - q.to[1]) < 1);
-      if (p) {
-        world.warpPuff(...p.from);
-        world.warpPuff(...p.to);
-      }
-      sfx.warp();
-    }
-    if (ev) {
-      if (game.mode === 'title') sim.place(...holes[game.holeIndex].tee);
-      else onPhysicsEvent(ev);
-      return;
-    }
-    // Something (a sliding block) knocked the ball while you were aiming.
-    if (game.mode === 'aim' && sim.moving) {
-      game.mode = 'rolling';
-      world.hideAim();
-      cancelDrag();
-    }
-    if (game.mode === 'rolling' && sim.restTime > SETTLE_TIME) {
-      sim.ball.vx = sim.ball.vz = 0;
-      ballReady();
-    }
-  } else {
-    sim.t += STEP;
-  }
-}
-
-// Where to draw the ball (it leaves the physics when it drops in or splashes).
-const ballPos = new Vector3();
-let frostTimer = 0, hissCount = 0;
-const ballVel = { x: 0, z: 0 };
-function placeBall(dt) {
-  const sim = game.sim, b = sim.ball, terrain = game.terrain;
-  ballVel.x = b.vx;
-  ballVel.z = b.vz;
-  if (game.sink) {
-    const s = game.sink;
-    s.t += dt;
-    const [cx, cz] = holes[game.holeIndex].cup;
-    const k = smooth(s.t / 0.18);
-    const x = s.x + (cx - s.x) * k, z = s.z + (cz - s.z) * k;
-    const drop = Math.min(0.24, 3.5 * s.t * s.t);
-    ballPos.set(x, terrain.cupLevel + BALL_R - drop, z);
-    ballVel.x = ballVel.z = 0;
-    return;
-  }
-  if (game.mode === 'splash') {
-    game.timer -= dt;
-    const s = game.splashAt;
-    // Sinks into the water, or drops down the gap.
-    const sink = s.fall ? Math.min(2, 4.9 * (1.1 - game.timer) ** 2) : Math.min(0.5, (1.1 - game.timer) * 0.8);
-    ballPos.set(s.x, terrain.height(s.x, s.z) + BALL_R - sink, s.z);
-    if (game.timer <= 0) {
-      sim.place(...game.lastRest);
-      ballReady();
-    }
-    return;
-  }
-  // Frost and a faint hiss behind a ball sliding on ice.
-  const surface = terrain.surfaceAt(b.x, b.z);
-  if (game.mode === 'rolling' && sim.speed > 0.3 && (surface === 'ice' || surface === 'frost')) {
-    frostTimer -= dt;
-    if (frostTimer <= 0) {
-      frostTimer = 0.07;
-      world.frost(b.x, b.z);
-      if ((hissCount = (hissCount + 1) % 4) === 0) sfx.ice(sim.speed);
-    }
-  }
-
-  // Over a gap the ball flies in an arc from one lip to the other.
-  let lift = 0;
-  if (sim.air) {
-    const { from, to } = sim.air;
-    const f = Math.max(0, Math.min(1, (b.z - from) / (to - from)));
-    lift = 4 * 0.35 * f * (1 - f);
-  }
-  ballPos.set(b.x, terrain.height(b.x, b.z) + BALL_R + lift, b.z);
-}
-
-// ---- Aiming -----------------------------------------------------------------------
-
-function predictPath(angle, power) {
-  const s = game.sim.clone();
-  s.shoot(angle, power);
-  const pts = [[s.ball.x, s.ball.z]];
-  const maxLen = 1.2 + power * 3.3;
-  let len = 0, hits = 0;
-  let lx = s.ball.x, lz = s.ball.z;
-  // Follows the roll through one bounce off a rail, and no further.
-  for (let i = 0; i < 240 * 2 && hits < 2; i++) {
-    const ev = s.step(() => { hits++; });
-    const d = Math.hypot(s.ball.x - lx, s.ball.z - lz);
-    if (d >= 0.11) {
-      len += d;
-      lx = s.ball.x;
-      lz = s.ball.z;
-      pts.push([lx, lz]);
-      if (len > maxLen) break;
-    }
-    if (ev || !s.moving) break;
-  }
-  return pts.slice(1);
-}
-
-function showAim() {
-  const { angle, power } = game.aim;
-  const cancelling = drag && drag.pull < CANCEL_PULL;
-  $('power').classList.toggle('cancel', !!cancelling);
-  // The power bar takes the hole name's place while you aim.
-  document.body.classList.toggle('aiming', !!cancelling || power > 0);
-  if (cancelling) {
-    world.hideAim();
-    $('power').hidden = false;
-    $('power-fill').style.width = '0';
-    $('power-text').textContent = 'Let go here to cancel';
-    return;
-  }
-  if (power <= 0) {
-    world.hideAim();
-    $('power').hidden = true;
-    return;
-  }
-  world.showAim(predictPath(angle, power), power);
-  $('power').hidden = false;
-  const fill = $('power-fill');
-  fill.style.width = `${Math.round(power * 100)}%`;
-  fill.style.background = `#${powerColor(power).getHexString()}`;
-  $('power-text').textContent = `${Math.round(power * 100)}%`;
-}
-
-// ---- Input: pointer ---------------------------------------------------------------
-
-const pointers = new Map();
-let drag = null;     // one finger / left mouse: aiming a putt
-let orbit = null;    // two fingers / right mouse: moving the camera
-let aimDirty = false; // the aim changed; redrawn once per frame, not per pointer move
-
-function fullPull() {
-  return Math.max(130, Math.min(170, Math.min(innerWidth, innerHeight) * 0.33));
-}
-
-function cancelDrag() {
-  drag = null;
-  if (!game.aim.keyboard) {
-    game.aim.power = 0;
-    showAim();
-  }
-}
-
-function resetPointers() {
-  pointers.clear();
-  orbit = null;
-  cancelDrag();
-}
-
-function nearBall(x, y, pointerType) {
-  const p = world.ballScreen();
-  return Math.hypot(x - p.x, y - p.y) <= (pointerType === 'mouse' ? GRAB_MOUSE : GRAB_TOUCH);
-}
-
-// A dashed ring round the ball while you can putt, showing where to start.
-function updateGrabRing() {
-  const ring = $('grab');
-  const show = game.mode === 'aim' && !game.paused && !drag && !orbit && !$('overlay').classList.contains('show');
-  ring.hidden = !show;
-  if (!show) return;
-  const p = world.ballScreen();
-  const r = matchMedia('(pointer: coarse)').matches ? GRAB_TOUCH : GRAB_MOUSE;
-  ring.style.width = ring.style.height = `${r * 2}px`;
-  ring.style.transform = `translate(${p.x - r}px, ${p.y - r}px)`;
-}
-
-function orbitStart() {
-  const pts = [...pointers.values()];
-  const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
-  const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
-  const spread = pts.length > 1 ? Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) : 0;
-  orbit = { cx, cy, spread, yaw: world.cam.want.yaw, pitch: world.cam.want.pitch, dist: world.cam.want.dist };
-}
-
-canvas.addEventListener('contextmenu', e => e.preventDefault());
-
-canvas.addEventListener('pointerdown', e => {
-  ac();
-  try {
-    canvas.setPointerCapture(e.pointerId);
-  } catch {
-    // Some browsers refuse capture for synthetic or already-ended pointers.
-  }
-  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button });
-  // A drag that starts on the ball putts; anywhere else (or with two
-  // fingers, or the right mouse button) turns the camera.
-  const onBall = nearBall(e.clientX, e.clientY, e.pointerType);
-  if (pointers.size >= 2 || e.button === 2 || e.button === 1 || !onBall || game.mode !== 'aim' || game.paused) {
-    cancelDrag();
-    orbitStart();
-    return;
-  }
-  {
-    drag = { x: e.clientX, y: e.clientY, id: e.pointerId, pull: 0 };
-    $('hint').hidden = true;
-    $('toast').classList.remove('show');
-    game.aim.keyboard = false;
-  }
-});
-
-canvas.addEventListener('pointermove', e => {
-  const p = pointers.get(e.pointerId);
-  if (!p) return;
-  p.x = e.clientX;
-  p.y = e.clientY;
-  if (orbit) {
-    const pts = [...pointers.values()];
-    const cx = pts.reduce((s, q) => s + q.x, 0) / pts.length;
-    const cy = pts.reduce((s, q) => s + q.y, 0) / pts.length;
-    const want = world.cam.want;
-    want.yaw = orbit.yaw + (cx - orbit.cx) * 0.009;
-    if (!world.cam.overview) {
-      want.pitch = Math.max(0.15, Math.min(1.35, orbit.pitch + (cy - orbit.cy) * 0.005));
-    }
-    if (pts.length > 1 && orbit.spread > 0) {
-      const spread = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-      want.dist = Math.max(1.8, Math.min(12, (orbit.dist * orbit.spread) / Math.max(20, spread)));
-    }
-    return;
-  }
-  if (drag && drag.id === e.pointerId && game.mode === 'aim') {
-    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-    const pull = Math.hypot(dx, dy);
-    drag.pull = pull;
-    if (pull < CANCEL_PULL) {
-      game.aim.power = 0;
-    } else {
-      game.aim.power = Math.min(1, pull / fullPull());
-      game.aim.angle = world.dragToAngle(dx, dy);
-    }
-    aimDirty = true;
-  }
-});
-
-function pointerEnd(e) {
-  if (!pointers.has(e.pointerId)) return;
-  pointers.delete(e.pointerId);
-  if (orbit) {
-    if (pointers.size === 0) orbit = null;
-    else orbitStart();
-    return;
-  }
-  if (drag && drag.id === e.pointerId) {
-    const { angle, power } = game.aim;
-    const pull = drag.pull;
-    drag = null;
-    if (e.type === 'pointerup' && pull >= CANCEL_PULL && power > 0) shoot(angle, power);
-    else cancelDrag();
-  }
-}
-canvas.addEventListener('pointerup', pointerEnd);
-canvas.addEventListener('pointercancel', pointerEnd);
-canvas.addEventListener('lostpointercapture', pointerEnd);
-document.addEventListener('visibilitychange', () => { if (document.hidden) resetPointers(); });
-
-canvas.addEventListener('wheel', e => {
-  e.preventDefault();
-  const want = world.cam.want;
-  want.dist = Math.max(1.8, Math.min(12, want.dist * Math.exp(e.deltaY * 0.0012)));
-}, { passive: false });
-
-// ---- Input: buttons and keys ------------------------------------------------------
-
-let turning = 0;
-function holdButton(id, dir) {
-  const el = $(id);
-  const stop = () => { turning = 0; };
-  el.addEventListener('pointerdown', e => { e.preventDefault(); turning = dir; });
-  el.addEventListener('pointerup', stop);
-  el.addEventListener('pointerleave', stop);
-  el.addEventListener('pointercancel', stop);
-  el.addEventListener('click', e => {
-    // Keyboard activation: one step.
-    if (e.detail === 0) world.cam.want.yaw += dir * 0.35;
-  });
-}
-holdButton('cam-left', 1);
-holdButton('cam-right', -1);
-
-function toggleOverview(force) {
-  const on = force ?? !world.cam.overview;
-  if (on === world.cam.overview) return;
-  world.cam.overview = on;
-  if (!on) {
-    Object.assign(world.cam.want, world.defaultView());
-  }
-  $('cam-view').setAttribute('aria-pressed', String(on));
-  $('cam-view-cap').textContent = on ? 'Follow' : 'Overview';
-}
-
-function faceFlag() {
-  const [cx, cz] = holes[game.holeIndex].cup;
-  const b = game.sim.ball;
-  world.cam.want.yaw = Math.atan2(cx - b.x, cz - b.z);
-  toggleOverview(false);
-}
-
-$('cam-view').addEventListener('click', () => toggleOverview());
-$('cam-flag').addEventListener('click', faceFlag);
-$('menu-btn').addEventListener('click', showMenu);
-$('overlay').addEventListener('click', e => {
-  if (e.target === $('overlay') && game.paused) resumeGame();
-});
-
-const keys = new Set();
-window.addEventListener('keydown', e => {
-  if ($('overlay').classList.contains('show')) {
-    if (e.key === 'Escape' && game.paused) resumeGame();
-    return;
-  }
-  // Let Space and Enter press a focused on-screen button.
-  if (e.target instanceof HTMLButtonElement && (e.key === ' ' || e.key === 'Enter')) return;
-  ac();
-  const k = e.key.toLowerCase();
-  if (k === 'escape') return showMenu();
-  if (k === 'r') return restartHole();
-  if (k === 'v') return toggleOverview();
-  if (k === 'f') return faceFlag();
-  if (['arrowleft', 'arrowright', 'arrowup', 'arrowdown', ' ', 'enter', 'q', 'e'].includes(k)) e.preventDefault();
-  if ((k === ' ' || k === 'enter') && game.aim.keyboard && game.aim.power > 0) {
-    return shoot(game.aim.angle, game.aim.power);
-  }
-  // A quick tap can come and go between frames, so the first press of an
-  // arrow key takes effect here; holding it keeps going in handleKeys.
-  if (KEY_NUDGE[k] && !keys.has(k) && game.mode === 'aim' && !game.paused) {
-    startKeyboardAim();
-    const fine = e.shiftKey ? 0.25 : 1;
-    game.aim.angle += KEY_NUDGE[k][0] * fine;
-    game.aim.power = Math.max(0, Math.min(1, game.aim.power + KEY_NUDGE[k][1] * fine));
-    aimFromKeyboard();
-  }
-  keys.add(k);
-});
-
-// [angle, power] for one tap of each arrow key.
-const KEY_NUDGE = {
-  arrowleft: [0.03, 0], arrowright: [-0.03, 0],
-  arrowup: [0, 0.02], arrowdown: [0, -0.02],
-};
-
-function startKeyboardAim() {
-  if (game.aim.keyboard) return;
-  game.aim.keyboard = true;
-  game.aim.angle = world.cam.want.yaw;
-  if (game.aim.power <= 0) game.aim.power = 0.3;
-}
-
-// The camera looks down the keyboard aim.
-function aimFromKeyboard() {
-  world.cam.want.yaw = game.aim.angle;
-  toggleOverview(false);
-  showAim();
-}
-window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
-window.addEventListener('blur', () => { keys.clear(); turning = 0; resetPointers(); });
-
-function handleKeys(dt) {
-  if (keys.has('q')) world.cam.want.yaw += dt * 1.6;
-  if (keys.has('e')) world.cam.want.yaw -= dt * 1.6;
-  if (turning) world.cam.want.yaw += turning * dt * 1.6;
-  if (game.mode !== 'aim' || game.paused) return;
-  const fine = keys.has('shift') ? 0.25 : 1;
-  let changed = false;
-  const startKeyboard = () => {
-    startKeyboardAim();
-    changed = true;
-  };
-  if (keys.has('arrowleft')) { startKeyboard(); game.aim.angle += dt * 1.1 * fine; }
-  if (keys.has('arrowright')) { startKeyboard(); game.aim.angle -= dt * 1.1 * fine; }
-  if (keys.has('arrowup')) { startKeyboard(); game.aim.power = Math.min(1, game.aim.power + dt * 0.5 * fine); }
-  if (keys.has('arrowdown')) { startKeyboard(); game.aim.power = Math.max(0, game.aim.power - dt * 0.5 * fine); }
-  if (changed) aimFromKeyboard();
 }
 
 // ---- Main loop ----------------------------------------------------------------------
@@ -1271,13 +393,8 @@ function frame(now) {
     if (game.mode === 'title' || game.mode === 'final') world.cam.want.yaw += dt * 0.12;
   }
   placeBall(game.paused ? 0 : dt);
-  // Keep the aim dots in step with moving obstacles (a few times a second
-  // is enough, and saves phones a lot of work).
   aimTick = (aimTick + 1) % 4;
-  if (aimDirty || (aimTick === 0 && game.mode === 'aim' && game.aim.power > 0 && (game.sim.hole.spinners || game.sim.hole.movers))) {
-    aimDirty = false;
-    showAim();
-  }
+  refreshAim(aimTick === 0);
   // Nothing moves while paused, so after a moment for the camera to settle
   // the picture stays as it is: saves battery behind the pause menu.
   stillFor = game.paused ? stillFor + dt : 0;
@@ -1317,3 +434,4 @@ window.miniGolf2 = {
   travelTo,
   MAP,
 };
+

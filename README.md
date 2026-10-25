@@ -2,11 +2,11 @@
 
 3D mini golf on floating sky islands, played in your phone's browser. The sequel to [Mini Golf](https://github.com/heidenreich/mini-golf): the same drag-back-and-release putting, now with real slopes, ramps, a crater and a camera you can swing round the ball.
 
-No build step. The only dependency is [three.js](https://threejs.org/) r160, vendored in `vendor/`.
+No build step. The only dependency is [three.js](https://threejs.org/) r160, vendored in `vendor/` along with the [Fredoka](https://github.com/hafontia/Fredoka-One) font (SIL Open Font License), so nothing loads from anywhere else.
 
 **Play:** https://heidenreich.github.io/mini-golf-2/
 
-**Install:** it's a PWA. On a phone, use *Add to Home Screen* (Safari's share menu, or Chrome's install prompt) and it opens full screen and plays offline. `sw.js` fetches the game's own files from the network first, so a new deploy shows up on the next load. three.js, the icons and the font are cached once and served from the cache after that. Bump `CACHE` in `sw.js` if you change the vendored three.js or the icons, or add a file to `SHELL` when you add a new script.
+**Install:** it's a PWA. On a phone, use *Add to Home Screen* (Safari's share menu, or Chrome's install prompt) and it opens full screen and plays offline. `sw.js` fetches the game's own files from the network first, so a new deploy shows up on the next load. three.js, the icons and the font are cached once and served from the cache after that. Bump `CACHE` in `sw.js` if you change anything in `vendor/` or the icons, and add a file to `SHELL` when you add a new script.
 
 ## Course
 
@@ -63,7 +63,15 @@ python3 -m http.server
 | `js/physics.js` | Tuning constants and the ball simulation: slopes, friction, rails, sliding blocks, gaps, windmills, bumpers, warp pipes, the cup |
 | `js/render.js` | Everything you see, built with three.js: ground, rails, island, water, cup and flag, obstacles, scenery, aim guide, effects, camera |
 | `js/themes.js` | Each island's look: ground and sky colours, lights, trees and other scenery, particles in the air, and signature pieces (ducks, tulip fields, lava, stars) |
-| `js/main.js` | Game state, the route and course map, travel between islands, input, sound, screens, saving and the main loop |
+| `js/state.js` | What every part shares: the 3D world, the holes, the state of the round, totals and where you can go next |
+| `js/main.js` | The flow of a round: title, holes, choosing a path, travel between islands, menus and the main loop |
+| `js/play.js` | Putting and what the ball does: physics events, splashes and falls, sinking, picking up, where to draw the ball |
+| `js/input.js` | Aiming and looking round: touch, mouse, keyboard, the camera buttons and the aim preview |
+| `js/ui.js` | The HTML over the 3D view: HUD, banners, cards and the scorecard |
+| `js/map.js` | The course map drawing |
+| `js/audio.js` | Sound effects, made with Web Audio |
+| `js/storage.js` | Saving the best round, settings and the round in progress |
+| `sw.js` | The service worker that makes it installable and playable offline |
 | `css/style.css` | HUD, menus and cards |
 
 How it works:
