@@ -14,7 +14,7 @@ import { roundShape } from './terrain.js';
 //               ramp   { axis, from, to, rise }     a smooth step from one level to another
 //               hill   { x, z, r | rx, rz, h }      a round bump (negative h makes a bowl)
 //               ridge  { axis, at, w, h }           a bump running all the way across
-//   zones     sand / water / ice / moss: ellipses { x, z, w, d } centred on x, z,
+//   zones     sand / water / ice / moss / snow: ellipses { x, z, w, d } centred on x, z,
 //             or add rect: true for a rectangle
 //   walls     extra wall segments [x1, z1, x2, z2]
 //   spinners  rotating bars { x, z, len (half-length), speed (rad/s), phase }
@@ -195,6 +195,9 @@ export const COURSE = {
         { type: 'water', x: -1.5, z: 7.6, w: 1.6, d: 3.8 },
         { type: 'water', x: 1.5, z: 7.6, w: 1.6, d: 3.8 },
         { type: 'ice', x: 0, z: 7.6, w: 1.4, d: 3.8, rect: true },
+        // A snowbank behind the cup: on the ice even a gentle rebound off the
+        // back rail would otherwise slide all the way back in.
+        { type: 'snow', x: 0.6, z: 13.55, w: 4, d: 0.8, rect: true },
       ],
     },
     {
@@ -229,9 +232,11 @@ export const COURSE = {
       shape: [[-1.6, -1], [1.6, -1], [2.2, 4], [1.4, 8], [2.0, 12], [1.4, 14], [-1.6, 14], [-2.0, 10], [-1.2, 6], [-2.2, 3]],
       round: 1.0,
       tee: [0, 0],
-      cup: [0.2, 12.4],
+      // Far enough from the back rail that a ball rebounding off it runs out
+      // of pace before the cup.
+      cup: [0.2, 11.8],
       ground: [
-        { type: 'hill', x: 0.2, z: 12.4, r: 1.3, h: -0.12 },
+        { type: 'hill', x: 0.2, z: 11.8, r: 1.3, h: -0.12 },
       ],
       bumpers: [
         { x: 0.7, z: 4.4, r: 0.28 },

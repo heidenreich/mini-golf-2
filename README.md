@@ -89,6 +89,7 @@ How it works:
 - **Rounded fairways.** Holes are drawn as simple outlines and `round` (in each hole's data) turns every corner into a curve before play, so the rails, physics and drawing all use the same smooth shape.
 - **Reading slopes.** The ground is shaded by height and steepness, with contour lines every 10 cm of height on sloping ground, and the sun shines from behind the tee so slopes facing you light up.
 - **Timestep:** fixed at 240 Hz, with sub-steps of under half a ball radius so a fast ball can't pass through a rail.
+- **Rails** give back 70% of a gentle hit, so bank shots work, but soak up most of a hard one (speed into the rail beyond `HARD_IMPACT` comes back at only `RESTITUTION_HARD`). A slammed ball dies near the wall instead of rolling back into the cup. Frozen Island has a snowbank behind its cup, since on ice even a gentle rebound would slide all the way back.
 - **Cup:** a ball slower than `CUP_CAPTURE_SPEED` drops in; a faster one dips over the lip, curls and carries on. Holing out on the last stage sets off fireworks.
 - **Gaps:** reach the edge moving faster than `GAP_MIN_SPEED` (across the gap) and the ball flies over with nothing slowing it, drawn in an arc; slower and it drops in.
 - **Low gravity:** a hole's `gravity` (0.35 on the Moon) scales the pull down slopes and the rolling resistance, so the ball rolls much further. The cup holds it less well too: the capture speed scales with the square root of gravity.

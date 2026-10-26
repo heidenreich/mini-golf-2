@@ -41,9 +41,31 @@ function roll(sim, angle, power) {
 
 // Roughly how many more strokes from (x, z): close is one putt, further is
 // more, and every gap or bridge still to cross adds risk.
+// Distance still to roll, along the hole: via the furthest point on its
+// route (round any corners) that the ball can see without a rail in the
+// way, as a player would think of it. A straight line through a dogleg's
+// corner rail would lure the player into nudging along the rail.
+const walls = new WeakMap();
+const crosses = (ax, az, bx, bz, w) => {
+  const side = (px, pz, qx, qz, rx, rz) => (qx - px) * (rz - pz) - (qz - pz) * (rx - px);
+  return side(w.x1, w.z1, w.x2, w.z2, ax, az) * side(w.x1, w.z1, w.x2, w.z2, bx, bz) < 0
+    && side(ax, az, bx, bz, w.x1, w.z1) * side(ax, az, bx, bz, w.x2, w.z2) < 0;
+};
+function distanceToGo(hole, x, z) {
+  if (!walls.has(hole)) walls.set(hole, new Sim(hole, makeTerrain(hole)).walls);
+  const ws = walls.get(hole);
+  const pts = [...(hole.route || []), hole.cup];
+  const rest = pts.map((p, i) => pts.slice(i).reduce((sum, q, k, arr) => sum + (k ? Math.hypot(q[0] - arr[k - 1][0], q[1] - arr[k - 1][1]) : 0), 0));
+  let best = Infinity;
+  pts.forEach(([px, pz], i) => {
+    if (ws.some(w => crosses(x, z, px, pz, w))) return;
+    best = Math.min(best, Math.hypot(px - x, pz - z) + rest[i]);
+  });
+  return best < Infinity ? best : Math.hypot(hole.cup[0] - x, hole.cup[1] - z) + rest[0];
+}
+
 function estimate(hole, x, z) {
-  const [cx, cz] = hole.cup;
-  const d = Math.hypot(cx - x, cz - z);
+  const d = distanceToGo(hole, x, z);
   let est = d < 0.5 ? 1 : d < 2 ? 1.3 : 1.6 + d / 8;
   for (const g of hole.gaps || []) if (z < g.z1) est += 0.6;
   for (const b of hole.ropeBridges || []) if (z < b.z2) est += 0.4;

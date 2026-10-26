@@ -15,6 +15,11 @@ export const STEP = 1 / 240;          // fixed physics step (s)
 const GRAVITY = 9.8;
 const ROLLING = 5 / 7;                // a rolling ball feels 5/7 of the pull down a slope
 const RESTITUTION = 0.7;
+// Rails soak up more of a hard hit: speed into the rail beyond HARD_IMPACT
+// comes back at only RESTITUTION_HARD, so a slammed ball dies near the wall
+// instead of rolling back into the cup. Gentle banks keep their bounce.
+const HARD_IMPACT = 1.5;              // m/s
+const RESTITUTION_HARD = 0.2;
 const SOFT_IMPACT = 0.25;             // slower hits than this don't bounce
 export const REST_SPEED = 0.05;     // slower than this counts as stopped
 const SPINNER_HALF = 0.07;
@@ -32,7 +37,8 @@ export const SURFACES = {
   sand:  { k: 2.6, decel: 4.2 },
   ice:   { k: 0.06, decel: 0.12 },
   frost: { k: 0.22, decel: 0.5 },      // a frozen fairway: slick, but you can still judge it
-  moss:  { k: 2.0, decel: 3.0 },       // soft: settles a ball on a small stepping stone
+  moss:  { k: 2.0, decel: 3.0 },
+  snow:  { k: 2.6, decel: 4.2 },       // a snowbank: stops a ball like sand       // soft: settles a ball on a small stepping stone
   water: { k: 0.32, decel: 0.8 },
 };
 
@@ -395,8 +401,9 @@ export class Sim {
       rvx -= vn * nx;
       rvz -= vn * nz;
     } else {
-      rvx -= (1 + RESTITUTION) * vn * nx;
-      rvz -= (1 + RESTITUTION) * vn * nz;
+      const out = RESTITUTION * Math.min(impact, HARD_IMPACT) + RESTITUTION_HARD * Math.max(0, impact - HARD_IMPACT);
+      rvx += (impact + out) * nx;
+      rvz += (impact + out) * nz;
       // A little scrub along the rail.
       const vt = rvx * -nz + rvz * nx;
       rvx -= -nz * vt * 0.06;

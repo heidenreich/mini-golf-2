@@ -18,6 +18,7 @@ const COLORS = {
   sand: new THREE.Color('#ead59a'),
   ice: new THREE.Color('#d7f2fb'),
   moss: new THREE.Color('#4f8f3e'),
+  snow: new THREE.Color('#fbfdff'),
   pondBed: new THREE.Color('#3d8a8f'),
   rail: new THREE.Color('#fbf3e4'),
   railSide: new THREE.Color('#e6d6b8'),
@@ -408,7 +409,7 @@ export class World {
     const rand = rng(99);
     const col = new THREE.Color();
     const pal = this.pal;
-    const zoneColor = { sand: COLORS.sand, ice: COLORS.ice, water: COLORS.pondBed, moss: COLORS.moss };
+    const zoneColor = { sand: COLORS.sand, ice: COLORS.ice, water: COLORS.pondBed, moss: COLORS.moss, snow: COLORS.snow };
     // Holes cut in the fairway: the cup and warp pipe mouths, and gaps.
     const cuts = [[cx, cz, CUP_R], ...(hole.pipes || []).map(p => [p.from[0], p.from[1], PIPE_R])];
     // Gaps, and rope bridges (drawn as planks instead of grass).
