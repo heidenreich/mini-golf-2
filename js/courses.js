@@ -277,7 +277,7 @@ export const COURSE = {
       theme: 'cloud',
       bonus: true,
       par: 2,
-      tip: 'A bonus island! The cloud cushions bounce the ball back. Bank it round the puff.',
+      tip: 'Bonus island! Par or better wins a mulligan, and a birdie comes off your score. Bank it round the puff.',
       shape: cloud(0, 5, 2.8, 5.2),
       round: 0.5,
       tee: [0, 0.6],

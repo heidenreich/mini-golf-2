@@ -38,6 +38,7 @@ export function saveRound() {
   try {
     localStorage.setItem(ROUND_KEY, JSON.stringify({
       hole: game.holeIndex, stage: game.stage, onBonus: game.onBonus, bonusPlayed: game.bonusPlayed,
+      mulligans: game.mulligans,
       route: game.route.filter(r => r.score != null),
       at: Date.now(),
     }));

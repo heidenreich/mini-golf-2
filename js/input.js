@@ -2,7 +2,7 @@
 import { $, canvas, game, world, holes } from './state.js';
 import { powerColor } from './render.js';
 import { ac } from './audio.js';
-import { shoot } from './play.js';
+import { shoot, useMulligan } from './play.js';
 import { showMenu, resumeGame, restartHole } from './main.js';
 
 const CANCEL_PULL = 16;         // px: let go inside this and the putt is cancelled
@@ -242,6 +242,7 @@ function faceFlag() {
 }
 
 $('cam-view').addEventListener('click', () => toggleOverview());
+$('mulligan').addEventListener('click', useMulligan);
 $('cam-flag').addEventListener('click', faceFlag);
 $('menu-btn').addEventListener('click', showMenu);
 $('overlay').addEventListener('click', e => {
@@ -262,6 +263,7 @@ window.addEventListener('keydown', e => {
   if (k === 'r') return restartHole();
   if (k === 'v') return toggleOverview();
   if (k === 'f') return faceFlag();
+  if (k === 'm') return useMulligan();
   if (['arrowleft', 'arrowright', 'arrowup', 'arrowdown', ' ', 'enter', 'q', 'e'].includes(k)) e.preventDefault();
   if ((k === ' ' || k === 'enter') && game.aim.keyboard && game.aim.power > 0) {
     return shoot(game.aim.angle, game.aim.power);

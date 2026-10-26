@@ -1,5 +1,5 @@
 // The HTML on top of the 3D view: the HUD, banners, cards and scorecard.
-import { $, game, holes, STAGES, MAX_STROKES, totals } from './state.js';
+import { $, game, holes, STAGES, MAX_STROKES, totals, counts } from './state.js';
 import { MAP } from './courses.js';
 
 let toastTimer = 0;
@@ -53,8 +53,10 @@ export function scorecardHtml() {
     return { head: i + 1, par, cell, cls: `${cls} ${current ? 'current' : ''}` };
   });
   if (bonus) {
+    // Shown faded when it doesn't count (par or worse on the bonus island).
     const d = bonus.score == null ? 0 : bonus.score - holes[bonus.hole].par;
-    cols.push({ head: '\u2605', par: holes[bonus.hole].par, cell: bonus.score ?? '&middot;', cls: `${d < 0 ? 'under' : d > 0 ? 'over' : ''} ${game.onBonus && game.mode !== 'final' ? 'current' : ''}` });
+    const off = bonus.score != null && !counts(bonus) ? 'void' : '';
+    cols.push({ head: '\u2605', par: holes[bonus.hole].par, cell: bonus.score ?? '&middot;', cls: `${d < 0 ? 'under' : off} ${game.onBonus && game.mode !== 'final' ? 'current' : ''}` });
   }
   const t = totals();
   return `<table class="scorecard">
@@ -62,6 +64,16 @@ export function scorecardHtml() {
     <tr><th>Par</th>${cols.map(c => `<td>${c.par}</td>`).join('')}<td>${t.par || '&middot;'}</td></tr>
     <tr><th>You</th>${cols.map(c => `<td class="${c.cls}">${c.cell}</td>`).join('')}<td><b>${t.strokes || '&middot;'}</b></td></tr>
   </table>`;
+}
+
+// The golden ball: shown while you hold a mulligan, and pressable once a
+// putt on this hole has come to rest.
+export function updateMulligan() {
+  const btn = $('mulligan');
+  const show = game.mulligans > 0 && ['aim', 'rolling', 'splash'].includes(game.mode) && !$('hud').hidden;
+  if (btn.hidden === show) btn.hidden = !show;
+  const ready = show && game.mode === 'aim' && !!game.undo && !game.paused;
+  if (btn.disabled === ready) btn.disabled = !ready;
 }
 
 export function fade(on) {
