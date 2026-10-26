@@ -53,6 +53,7 @@ function ballReady() {
   game.mode = 'aim';
   game.lastRest = [game.sim.ball.x, game.sim.ball.z];
   if (game.strokes >= MAX_STROKES) return pickUp();
+  saveRound();
   if (game.strokes === MAX_STROKES - 1) toast('Last stroke before the ball is picked up');
   // Turn to face down the hole if the view has drifted well off it.
   const yaw = lookYaw();

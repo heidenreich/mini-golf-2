@@ -1,6 +1,6 @@
 // What's kept between visits: best round and settings, and the round in
 // progress.
-import { game, holes } from './state.js';
+import { game, holes, STAGES, MAX_STROKES } from './state.js';
 
 const SAVE_KEY = 'minigolf2';
 const ROUND_KEY = 'minigolf2-round';
@@ -30,15 +30,18 @@ export function save(data) {
 
 // ---- Saving the round in progress -------------------------------------------------
 
-// Where you are in the round, so a reload can pick it up again. It goes in
-// localStorage rather than sessionStorage: phones close installed apps in the
-// background, and that throws sessionStorage away.
+// Where you are in the round, so a reload can pick it up again: the hole,
+// the strokes on it so far and where the ball lies (saved whenever it comes
+// to rest), or its score once it's done. It goes in localStorage rather than
+// sessionStorage: phones close installed apps in the background, and that
+// throws sessionStorage away.
 export function saveRound() {
   if (game.mode === 'title') return;
   try {
     localStorage.setItem(ROUND_KEY, JSON.stringify({
       hole: game.holeIndex, stage: game.stage, onBonus: game.onBonus, bonusPlayed: game.bonusPlayed,
       mulligans: game.mulligans,
+      strokes: game.strokes, ball: game.lastRest,
       route: game.route.filter(r => r.score != null),
       at: Date.now(),
     }));
@@ -52,7 +55,14 @@ export function savedRound() {
     const r = JSON.parse(localStorage.getItem(ROUND_KEY));
     if (!r || !holes[r.hole] || !Array.isArray(r.route)) return null;
     if (!Number.isFinite(r.at) || Date.now() - r.at > ROUND_TTL) return null;
-    if (!r.route.every(q => holes[q.hole] && Number.isFinite(q.score))) return null;
+    if (!r.route.every(q => holes[q.hole] && Number.isInteger(q.score))) return null;
+    if (!Number.isInteger(r.stage) || r.stage < 0 || r.stage >= STAGES) return null;
+    r.onBonus = r.onBonus === true;
+    r.bonusPlayed = r.bonusPlayed === true;
+    r.mulligans = r.mulligans === 1 ? 1 : 0;
+    // Older saves have no strokes or ball: start that hole from the tee.
+    r.strokes = Number.isInteger(r.strokes) && r.strokes >= 0 && r.strokes < MAX_STROKES ? r.strokes : 0;
+    r.ball = Array.isArray(r.ball) && r.ball.length === 2 && r.ball.every(Number.isFinite) ? r.ball : null;
     return r;
   } catch {
     return null;

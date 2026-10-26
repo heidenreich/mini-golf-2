@@ -1,7 +1,8 @@
-// Offline support. The game's own files are fetched network-first so a new
-// deploy shows up on the next load; three.js, the font and the icons never
-// change, so they come from the cache first.
-const CACHE = 'mini-golf-2-v2';
+// Offline support. The game's own files are fetched network-first (and
+// revalidated with the server) so a new deploy shows up on the next load;
+// three.js, the font and the icons never change, so they come from the
+// cache first.
+const CACHE = 'mini-golf-2-v3';
 const SHELL = [
   './',
   'index.html',
@@ -36,7 +37,9 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      // Only this game's old caches: other sites on heidenreich.github.io
+      // share the same cache storage.
+      .then(keys => Promise.all(keys.filter(k => k.startsWith('mini-golf-2-') && k !== CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -60,8 +63,12 @@ self.addEventListener('fetch', e => {
     e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(res => put(req, res))));
     return;
   }
+  // Check with the server rather than the browser's HTTP cache, so a new
+  // deploy shows up on the next load (GitHub Pages lets pages be cached for
+  // ten minutes). A page load can't take options, so it's fetched by URL.
+  const fresh = req.mode === 'navigate' ? fetch(req.url, { cache: 'no-cache' }) : fetch(req, { cache: 'no-cache' });
   e.respondWith(
-    fetch(req)
+    fresh
       .then(res => put(req, res))
       .catch(() => caches.match(req, { ignoreSearch: true })
         .then(hit => hit || (req.mode === 'navigate' ? caches.match('./') : Response.error())))

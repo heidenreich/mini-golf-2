@@ -346,6 +346,15 @@ export class Sim {
     for (const m of this.hole.movers || []) {
       const st = moverState(m, t);
       const hw = m.w / 2 - MOVER_HALF, hd = m.d / 2 - MOVER_HALF;
+      // A ball put back on the fairway (after a splash or a mulligan) can
+      // land inside a block that has slid over that spot; pop it out of the
+      // nearest side rather than leave it rattling about inside.
+      const ix = this.ball.x - st.x, iz = this.ball.z - st.z;
+      if (Math.abs(ix) < hw && Math.abs(iz) < hd) {
+        const out = MOVER_HALF + BALL_R + 0.005;
+        if (hw - Math.abs(ix) < hd - Math.abs(iz)) this.ball.x = st.x + Math.sign(ix || 1) * (hw + out);
+        else this.ball.z = st.z + Math.sign(iz || 1) * (hd + out);
+      }
       const x0 = st.x - hw, x1 = st.x + hw, z0 = st.z - hd, z1 = st.z + hd;
       const seg = this.moverSeg || (this.moverSeg = {});
       for (const [ax, az, bx, bz] of [[x0, z0, x1, z0], [x1, z0, x1, z1], [x1, z1, x0, z1], [x0, z1, x0, z0]]) {

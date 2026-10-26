@@ -243,6 +243,11 @@ function faceFlag() {
 
 $('cam-view').addEventListener('click', () => toggleOverview());
 $('mulligan').addEventListener('click', useMulligan);
+// A button clicked or tapped keeps the keyboard's focus, so Space and Enter
+// would press it again instead of putting. Keyboard users (detail 0) keep it.
+for (const id of ['menu-btn', 'cam-left', 'cam-flag', 'cam-view', 'cam-right', 'mulligan']) {
+  $(id).addEventListener('click', e => { if (e.detail > 0) e.currentTarget.blur(); });
+}
 $('cam-flag').addEventListener('click', faceFlag);
 $('menu-btn').addEventListener('click', showMenu);
 $('overlay').addEventListener('click', e => {

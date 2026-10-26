@@ -295,8 +295,9 @@ export class World {
       // run out of graphics memory a few islands in otherwise.
       this.holeGroup.traverse(o => {
         if (o.geometry) o.geometry.dispose();
-        const m = o.material;
-        if (m && m.dispose) {
+        // One material, or a list of them (the signposts have one per face).
+        for (const m of [].concat(o.material || [])) {
+          if (!m.dispose) continue;
           for (const key of ['map', 'alphaMap', 'emissiveMap']) if (m[key]) m[key].dispose();
           m.dispose();
         }

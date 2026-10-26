@@ -37,9 +37,12 @@ export function mapSvg(choices = []) {
   }
   // A golden bridge can lead from any island, so only the one you opened or
   // took is drawn (all of them would bury the map).
+  // Open now: you've just made a hole-in-one here (shown on the map opened
+  // from the pause menu too, not just when choosing where to go).
+  const goldOpen = !!choiceOf.get(MAP.bonus.hole) || (['done', 'choose'].includes(game.mode) && game.links.some(l => l.kind === 'gold'));
   for (const s of MAP.bonus.from) {
     for (const a of MAP.stages[s]) {
-      const open = choiceOf.get(MAP.bonus.hole) && game.holeIndex === a;
+      const open = goldOpen && game.holeIndex === a;
       if (took(a, MAP.bonus.hole) || open) line(a, MAP.bonus.hole, `bridge gold ${open ? 'open' : 'taken'}`);
     }
   }
@@ -56,7 +59,7 @@ export function mapSvg(choices = []) {
     const score = v && v.score != null ? v.score : '';
     const d = v && v.score != null ? v.score - h.par : 0;
     const bonus = i === MAP.bonus.hole;
-    const locked = bonus && !choice && !visited.has(i);
+    const locked = bonus && !choice && !goldOpen && !visited.has(i);
     // White score text doesn't show on a pale island (the cloud), so dark it is.
     const pale = (THEMES[h.theme] || THEMES.meadow).ground.grassA.getHSL({}).l > 0.75;
     const cls = ['island', choice ? 'choice' : '', v ? 'visited' : '', here ? 'here' : '', locked ? 'locked' : '', pale ? 'pale' : '', d < 0 ? 'under' : d > 0 ? 'over' : ''].join(' ');

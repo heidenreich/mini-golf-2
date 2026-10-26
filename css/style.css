@@ -340,8 +340,22 @@ body.aiming #hud-name { visibility: hidden; }
 .path-choice b { font-size: 17px; }
 .path-choice span { font-size: 13px; opacity: 0.85; }
 .path-choice.gold { background: #b07d0c; border-color: #ffe08a; }
-.path-choice.locked { background: rgba(31, 53, 80, 0.55); border-style: dashed; pointer-events: none; animation: none; }
-.path-choice:focus-visible { outline: 3px solid #ffd23f; outline-offset: 3px; }
+.path-choice:focus-visible { outline: 3px solid #fff; outline-offset: 3px; box-shadow: 0 0 0 6px var(--ink); }
+.paths-title {
+  position: fixed;
+  top: calc(64px + var(--safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 16px;
+  background: var(--chip);
+  box-shadow: var(--shadow);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.path-leaders { position: fixed; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.path-leaders line { stroke: #fff; stroke-width: 3; stroke-linecap: round; filter: drop-shadow(0 1px 2px rgba(20, 50, 80, 0.5)); }
+.path-leaders circle { fill: #fff; stroke: var(--ink); stroke-width: 2; }
 @keyframes path-bob { 50% { margin-top: -6px; } }
 @media (prefers-reduced-motion: reduce) { .path-choice { animation: none; } }
 

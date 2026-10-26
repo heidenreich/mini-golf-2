@@ -2,7 +2,7 @@
 // islands, menus and the main loop.
 import { MAP, COURSE } from './courses.js';
 import { THEMES } from './themes.js';
-import { makeTerrain } from './terrain.js';
+import { makeTerrain, insidePolygon } from './terrain.js';
 import { Sim, STEP } from './physics.js';
 import { $, canvas, world, holes, STAGES, MAX_STROKES, game, nextChoices, totals } from './state.js';
 import { load, save, saveRound, savedRound, clearRound } from './storage.js';
@@ -46,12 +46,12 @@ function choosePath() {
   setPlaying(false);
   game.mode = 'choose';
   world.lookAtBridges();
-  $('paths').innerHTML = game.links.map((l, n) => {
+  // A locked golden bridge isn't labelled: its padlock and signpost say it
+  // all, and a third label would crowd the two you can choose.
+  $('paths').innerHTML = `<div class="paths-title">Choose your next island</div><svg class="path-leaders" aria-hidden="true"></svg>` + game.links.map((l, n) => {
     const h = holes[l.hole];
     const theme = (THEMES[h.theme] || THEMES.meadow).name;
-    if (l.kind === 'locked') {
-      return `<div class="path-choice locked" data-n="${n}"><b>${h.name}</b><span>Bonus island &middot; hole-in-one to open</span></div>`;
-    }
+    if (l.kind === 'locked') return '';
     return `<button class="path-choice ${l.kind === 'gold' ? 'gold' : ''}" data-n="${n}" data-go="${l.hole}">
       <b>${h.name}</b><span>Par ${h.par} &middot; ${l.kind === 'gold' ? 'bonus: win a mulligan' : theme}</span></button>`;
   }).join('');
@@ -68,29 +68,61 @@ function showPaths() {
   if (first) first.focus({ preventScroll: true });
 }
 
-// Keeps each label over its signpost as the camera moves.
+// Keeps each label near its signpost as the camera moves, with a line down
+// to the sign. Labels are spread apart until none overlap: sideways where
+// there's room, otherwise up or down, always inside the screen.
 function placePathLabels() {
   const box = $('paths');
   if (box.hidden) return;
   const spots = world.signsOnScreen();
-  // Over each signpost, then nudged apart so no two overlap and none runs
-  // off the side of the screen.
-  const items = [...box.children].map(el => ({ el, p: spots[Number(el.dataset.n)], w: el.offsetWidth, h: el.offsetHeight }))
-    .filter(it => it.p)
-    .sort((a, b) => a.p.x - b.p.x);
-  const placed = [];
+  const W = innerWidth, H = innerHeight;
+  const top = 116, bottom = H - 16, gap = 10;
+  const items = [...box.querySelectorAll('.path-choice')].map(el => ({ el, p: spots[Number(el.dataset.n)], w: el.offsetWidth, h: el.offsetHeight }))
+    .filter(it => it.p);
+  const clampX = it => Math.max(it.w / 2 + 8, Math.min(W - it.w / 2 - 8, it.x));
+  const clampY = it => Math.max(top + it.h, Math.min(bottom, it.y));
+  // x is the label's centre, y its bottom edge: start just above the sign.
   for (const it of items) {
-    let x = Math.max(it.w / 2 + 8, Math.min(innerWidth - it.w / 2 - 8, it.p.x));
-    let y = it.p.y;
-    for (const q of placed) {
-      const overlapX = Math.abs(x - q.x) < (it.w + q.w) / 2 + 6, overlapY = Math.abs(y - q.y) < (it.h + q.h) / 2 + 6;
-      if (overlapX && overlapY) y = q.y - (it.h + q.h) / 2 - 8;
-    }
-    y = Math.max(it.h + 60, y);
-    placed.push({ x, y, w: it.w, h: it.h });
-    it.el.style.visibility = it.p.visible ? 'visible' : 'hidden';
-    it.el.style.transform = `translate(-50%, -100%) translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+    it.x = it.p.x;
+    it.y = it.p.y - 24;
+    it.x = clampX(it);
+    it.y = clampY(it);
   }
+  for (let pass = 0; pass < 30; pass++) {
+    let moved = false;
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        const a = items[i], b = items[j];
+        const ox = (a.w + b.w) / 2 + gap - Math.abs(a.x - b.x);
+        const oy = (a.h + b.h) / 2 + gap - Math.abs((a.y - a.h / 2) - (b.y - b.h / 2));
+        if (ox <= 0 || oy <= 0) continue;
+        moved = true;
+        const [l, r] = a.x <= b.x ? [a, b] : [b, a];
+        const [hi, lo] = a.y <= b.y ? [a, b] : [b, a];
+        // Sideways if both still fit on screen, else apart vertically.
+        if (l.x - ox / 2 >= l.w / 2 + 8 && r.x + ox / 2 <= W - r.w / 2 - 8 && ox <= oy * 1.5) {
+          l.x -= ox / 2;
+          r.x += ox / 2;
+        } else if (hi.y - hi.h - oy >= top) {
+          hi.y -= oy;
+        } else {
+          lo.y = Math.min(bottom, lo.y + oy);
+          hi.y = clampY({ ...hi, y: hi.y - oy });
+        }
+      }
+    }
+    if (!moved) break;
+  }
+  const lines = [];
+  for (const it of items) {
+    const show = it.p.visible;
+    it.el.style.visibility = show ? 'visible' : 'hidden';
+    it.el.style.transform = `translate(-50%, -100%) translate(${Math.round(it.x)}px, ${Math.round(it.y)}px)`;
+    if (show && Math.hypot(it.p.x - it.x, it.p.y - it.y) > 14) {
+      lines.push(`<line x1="${it.x.toFixed(0)}" y1="${it.y.toFixed(0)}" x2="${it.p.x.toFixed(0)}" y2="${it.p.y.toFixed(0)}"/><circle cx="${it.p.x.toFixed(0)}" cy="${it.p.y.toFixed(0)}" r="5"/>`);
+    }
+  }
+  box.querySelector('.path-leaders').innerHTML = lines.join('');
 }
 
 $('paths').addEventListener('click', e => {
@@ -122,12 +154,30 @@ function travelTo(hole) {
 }
 
 // Builds the hole and flies in across its bridge.
-function enterHole(hole) {
+// `resume`: a saved round, to put the ball and strokes back where they were
+// (or, if this hole was finished, back on its end-of-hole card).
+function enterHole(hole, resume = null) {
   startHole(hole, { quiet: true });
   game.mode = 'travel';
+  const done = game.route.find(r => r.hole === hole && r.score != null);
+  if (resume && !done) {
+    game.strokes = resume.strokes;
+    const b = resume.ball;
+    if (b && insidePolygon(holes[hole].shape, b[0], b[1])) {
+      game.sim.place(b[0], b[1]);
+      game.lastRest = [b[0], b[1]];
+      world.cam.target.set(b[0], game.terrain.height(b[0], b[1]), b[1]);
+    }
+    updateHud();
+    saveRound();
+  }
   setPlaying(false);
   fade(false);
   world.flyIn(() => {
+    if (done) {
+      setPlaying(true);
+      return finishHole(done.score, '', { resumed: true });
+    }
     game.mode = 'aim';
     setPlaying(true);
     const h = holes[hole];
@@ -144,9 +194,10 @@ function resumeRound() {
   game.stage = r.stage;
   game.onBonus = r.onBonus;
   game.bonusPlayed = r.bonusPlayed;
-  game.mulligans = r.mulligans === 1 ? 1 : 0;
+  game.mulligans = r.mulligans;
+  game.mode = 'travel';
   hideCard();
-  enterHole(r.hole);
+  enterHole(r.hole, r);
 }
 
 // ---- Screens ---------------------------------------------------------------------
@@ -191,6 +242,7 @@ function startRound() {
   game.onBonus = false;
   game.bonusPlayed = false;
   game.mulligans = 0;
+  game.mode = 'travel';   // not 'title', so hole 1 is saved
   hideCard();
   enterHole(MAP.stages[0][0]);
 }
@@ -231,11 +283,12 @@ function startHole(i, { quiet = false, keepStrokes = false } = {}) {
   }
 }
 
-export function finishHole(score, note = '') {
+export function finishHole(score, note = '', { resumed = false } = {}) {
   const r = game.route.find(q => q.hole === game.holeIndex);
   if (r) r.score = score;
   game.mode = 'done';
   game.undo = null;
+  saveRound();
   const hole = holes[game.holeIndex];
   // Par or better on the bonus island wins a mulligan.
   let bonusNote = '';
@@ -248,12 +301,12 @@ export function finishHole(score, note = '') {
   updateHud();
   const last = !game.onBonus && game.stage === STAGES - 1;
   const d = score - hole.par;
-  if (d < 0 || score === 1) sfx.cheer(score === 1 ? 3 : -d);
+  if (!resumed && (d < 0 || score === 1)) sfx.cheer(score === 1 ? 3 : -d);
   // A hole-in-one opens the way to the bonus island.
   game.links = nextChoices();
   if (game.links.some(l => l.kind === 'gold')) {
     world.unlockGold();
-    setTimeout(() => toast('The golden bridge is open!<small>Par or better on the bonus island wins a mulligan.</small>', 3200), 600);
+    bonusNote = '<p class="bonus-note"><b>The golden bridge is open!</b> Cross it to the bonus island, where par or better wins a mulligan.</p>';
   }
   // With only one island to go to, skip the map and head straight there.
   const open = game.links.filter(l => l.kind !== 'locked');
@@ -272,7 +325,7 @@ export function finishHole(score, note = '') {
       ${scorecardHtml()}
       <div class="buttons">${nextButton}<button class="btn" data-act="menu">Menu</button></div>`;
     if (!game.paused) showCard(game.doneCard);
-  }, score === 1 ? 1600 : 1000);
+  }, resumed ? 0 : score === 1 ? 1600 : 1000);
 }
 
 function showFinal() {
