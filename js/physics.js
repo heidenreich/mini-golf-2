@@ -8,6 +8,8 @@ export const WALL_HALF = 0.06;        // half the thickness of every rail
 export const MAX_SPEED = 9.5;         // m/s at full power
 export const POWER_CURVE = 1.5;       // speed = MAX_SPEED * power^curve: fine control on short putts
 export const CUP_CAPTURE_SPEED = 2.1; // faster than this and the ball lips out
+const LIP_TIP = 0.4;                  // a slow ball this far (in ball radii) past the rim still drops
+const LIP_TIP_SPEED = 0.6;            // ...if it's slower than this (m/s)
 export const STEP = 1 / 240;          // fixed physics step (s)
 
 const GRAVITY = 9.8;
@@ -264,8 +266,10 @@ export class Sim {
     const [cx, cz] = this.hole.cup;
     const dx = cx - b.x, dz = cz - b.z;
     const d = Math.hypot(dx, dz);
-    if (d >= CUP_R) return null;
     const sp = Math.hypot(b.vx, b.vz);
+    // A slow ball hanging well over the edge tips in, rather than sitting
+    // on the lip half over the hole.
+    if (d >= CUP_R) return d < CUP_R + BALL_R * LIP_TIP && sp < LIP_TIP_SPEED ? { type: 'cup' } : null;
     // Dead centre forgives a little more pace than a ball clipping the edge.
     // In low gravity the ball is held in less, so it lips out more easily.
     const limit = CUP_CAPTURE_SPEED * Math.sqrt(this.hole.gravity || 1) * (d < CUP_R * 0.4 ? 1.4 : 1);
