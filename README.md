@@ -10,7 +10,7 @@ No build step. The only dependency is [three.js](https://threejs.org/) r160, ven
 
 ## Course
 
-**Sky Islands**: 13 floating islands linked by rope bridges. A round crosses nine of them. Each bridge has a signpost naming the island it leads to. Where a stage has two islands you choose: the camera looks out over the bridges, you tap the label over the one you want, and it flies you across. With only one way on, it flies you straight there. The pause menu shows the whole course map and your route.
+**Sky Islands**: 15 floating islands linked by rope bridges. A round crosses nine of them. Each bridge has a signpost naming the island it leads to. Where a stage has two islands you choose: the camera looks out over the bridges, you tap the label over the one you want, and it flies you across. With only one way on, it flies you straight there. The pause menu shows the whole course map and your route.
 
 Each hole sits on its own themed floating island: a wobbly outline with bays and headlands, an underside of earth and rock hanging into the sky, things dangling off the edge (vines, roots, icicles, crystals or lava), waterfalls on the greener islands, wisps of cloud round the base and small rocks drifting alongside. The fairways have rounded, cloud-soft outlines; rails stay straight where a hole is built around bank shots or moving blocks.
 
@@ -20,6 +20,7 @@ Each hole sits on its own themed floating island: a wobbly outline with bays and
 | 2 | The Gap | 2 | Desert canyon | Up a kicker and over a chasm. Too soft and the ball drops in (+1 stroke) |
 | 2 | *or* Mushroom Grove | 3 | Mushroom grove | Giant mushrooms that bounce the ball about |
 | 3 | Dogleg Bowl | 3 | Autumn forest | A left-hand dogleg with a bowl in the corner that gathers the ball |
+| 3 | *or* Island Hopper | 3 | Tropical beach | Three islets with open sky between. Hop to the middle one, whose hollow catches the ball; too soft or too hard drops into the sky (+1 stroke) |
 | 4 | Duck Pond | 3 | Lily pond | A pond in the middle (+1 stroke, ball returns), a bunker, bumpers behind the cup |
 | 4 | *or* Cherry Terraces | 3 | Cherry blossom | Climb two terraces; too soft rolls back down a level |
 | 5 | Windmill | 3 | Tulip fields | Through the door between the turning sails, or round either side |
@@ -27,6 +28,7 @@ Each hole sits on its own themed floating island: a wobbly outline with bays and
 | 6 | *or* Crystal Sweepers | 3 | Crystal caves | Two spinning crystal bars to time your putt past |
 | 7 | Switchback | 4 | Tropical beach | Downhill round two corners, past a bunker, over a ridge |
 | 8 | Frozen Island | 3 | Winter | The whole fairway is frozen; ponds either side of an ice bridge |
+| 8 | *or* Rope Bridge | 3 | Cherry blossom | Putt along a sagging plank bridge with no rails; roll off the side and it falls (+1 stroke) |
 | 9 | Warp Finale | 3 | Night | Sliding blocks, or a warp pipe up the ramp; fireworks when you hole out |
 | ★ | Cloud Island (bonus) | 2 | Cloud | Puffy cloud cushions bounce the ball back. Reached by a golden bridge |
 
@@ -72,6 +74,7 @@ python3 -m http.server
 | `js/audio.js` | Sound effects, made with Web Audio |
 | `js/storage.js` | Saving the best round, settings and the round in progress |
 | `sw.js` | The service worker that makes it installable and playable offline |
+| `tools/simulate.mjs` | The simulated player used to tune each hole's difficulty (run with Node; not part of the game) |
 | `css/style.css` | HUD, menus and cards |
 
 How it works:
@@ -85,9 +88,10 @@ How it works:
 - **Timestep:** fixed at 240 Hz, with sub-steps of under half a ball radius so a fast ball can't pass through a rail.
 - **Cup:** a ball slower than `CUP_CAPTURE_SPEED` drops in; a faster one dips over the lip, curls and carries on.
 - **Gaps:** reach the edge moving faster than `GAP_MIN_SPEED` (across the gap) and the ball flies over with nothing slowing it, drawn in an arc; slower and it drops in.
+- **Open edges:** a rope bridge, or a gap marked `split`, cuts the island right through and has no rails. A ball that leaves the fairway there falls (+1 stroke), where anywhere else it would just be put back.
 - **Windmills:** the building is ordinary walls with a tunnel through it. While a sail hangs within `WINDMILL_GATE` of straight down, a gate across the doorway bounces the ball back.
 - **Bumpers** bounce like rails and then add `BUMPER_KICK` of speed. **Warp pipes** take any ball slower than `PIPE_MAX_SPEED` and fire it out of the far pipe at least `PIPE_MIN_OUT` fast.
 
-Difficulty was tuned with a simulated player that picks a sensible line and then misses it by a gaussian amount: careful players (about ±3° and ±8% power) average around 22 for the round, casual players (±6°, ±15%) around 30.
+Difficulty was tuned with a simulated player that picks a sensible line and then misses it by a gaussian amount: careful players (about ±3° and ±8% power) average around 22 for the round, casual players (±6°, ±15%) around 30. The player is in `tools/simulate.mjs`: `node tools/simulate.mjs "Rope Bridge" 100` plays a hole 100 times at each skill level and prints the average and spread of scores. It takes a second or two a stroke, so run holes in parallel when tuning several. (The round averages above came from an earlier version of this player, which played a little worse.) The two newest holes are the hardest alternates: on Island Hopper careful players average about 3.1 and casual ones 3.6; Rope Bridge is about 2.1 for careful players but 4.0 for casual ones, who often roll off the side.
 
 `window.miniGolf2` exposes the game state plus `shoot(angle, power)`, `startRound` and `startHole(i)` for debugging and automated tests.

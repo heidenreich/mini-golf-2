@@ -84,12 +84,41 @@ function windmillWalls(w) {
   ];
 }
 
+// Stretches with open sky beside the fairway and no rails: rope bridges,
+// and gaps that split the island in two. Roll off the side there and the
+// ball falls.
+export function openBands(hole) {
+  return [...(hole.ropeBridges || []), ...(hole.gaps || []).filter(g => g.split)];
+}
+
+// The parts of a segment outside every band: [[x1, z1, x2, z2], ...].
+export function clipToBands(seg, bands) {
+  let pieces = [seg];
+  for (const { z1: b1, z2: b2 } of bands) {
+    pieces = pieces.flatMap(([x1, z1, x2, z2]) => {
+      const at = z => (z2 === z1 ? 0 : (z - z1) / (z2 - z1));
+      const pt = t => [x1 + (x2 - x1) * t, z1 + (z2 - z1) * t];
+      const lo = Math.min(z1, z2), hi = Math.max(z1, z2);
+      if (hi <= b1 || lo >= b2) return [[x1, z1, x2, z2]];
+      if (lo >= b1 && hi <= b2) return [];
+      const ta = Math.max(0, Math.min(1, at(b1))), tb = Math.max(0, Math.min(1, at(b2)));
+      const [t0, t1] = ta < tb ? [ta, tb] : [tb, ta];
+      const out = [];
+      if (t0 > 1e-6) out.push([x1, z1, ...pt(t0)]);
+      if (t1 < 1 - 1e-6) out.push([...pt(t1), x2, z2]);
+      return out;
+    });
+  }
+  return pieces;
+}
+
 function wallSegments(hole) {
   const segs = [];
   const pts = hole.shape;
+  const bands = openBands(hole);
   for (let i = 0; i < pts.length; i++) {
     const [x1, z1] = pts[i], [x2, z2] = pts[(i + 1) % pts.length];
-    segs.push({ x1, z1, x2, z2 });
+    for (const [a, b, c, d] of clipToBands([x1, z1, x2, z2], bands)) segs.push({ x1: a, z1: b, x2: c, z2: d });
   }
   const extra = [...(hole.walls || []), ...(hole.windmills || []).flatMap(windmillWalls)];
   for (const [x1, z1, x2, z2] of extra) segs.push({ x1, z1, x2, z2 });
@@ -106,6 +135,7 @@ export class Sim {
     this.terrain = terrain;
     this.walls = wallSegments(hole);
     this.water = (hole.zones || []).filter(z => z.type === 'water');
+    this.open = openBands(hole);
     this.ball = { x: hole.tee[0], z: hole.tee[1], vx: 0, vz: 0 };
     this.t = 0;
     this.restTime = 0;
@@ -150,7 +180,8 @@ export class Sim {
   }
 
   // Advances one STEP. Returns null or the event that ended the roll:
-  // { type: 'cup' | 'water' | 'fall' | 'lost' }. Hits on rails and obstacles
+  // { type: 'cup' | 'water' | 'fall' | 'lost' } ('fall' says `off: true` for
+  // the side of a bridge or open gap). Hits on rails and obstacles
   // are reported through onHit(speed, x, z, what).
   step(onHit) {
     const b = this.ball;
@@ -215,7 +246,11 @@ export class Sim {
     for (const w of this.water) {
       if (zoneContains(w, b.x, b.z, 0.92)) return { type: 'water' };
     }
-    if (!insidePolygon(this.hole.shape, b.x, b.z)) return { type: 'lost' };
+    if (!insidePolygon(this.hole.shape, b.x, b.z)) {
+      // No rail here: over the side it goes.
+      if (this.open.some(o => b.z > o.z1 && b.z < o.z2)) return { type: 'fall', off: true };
+      return { type: 'lost' };
+    }
     return null;
   }
 

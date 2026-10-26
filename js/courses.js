@@ -20,7 +20,10 @@ import { roundShape } from './terrain.js';
 //   spinners  rotating bars { x, z, len (half-length), speed (rad/s), phase }
 //   movers    blocks { x1, z1, x2, z2, w, d, period, phase } gliding between two points
 //   gaps      chasms right across the hole { z1, z2 }: reach the edge fast
-//             enough and the ball flies over, too slow and it drops in (+1 stroke)
+//             enough and the ball flies over, too slow and it drops in (+1 stroke).
+//             split: true opens the island right through, with sky below
+//   ropeBridges  { z1, z2 }: between z1 and z2 the fairway is a plank bridge
+//             with no rails; roll off the side and it falls (+1 stroke)
 //   windmills { x, z, w, d, door, period, phase }: a building with a tunnel
 //             through it; the sails block the doorway as they pass
 //   bumpers   pinball bumpers { x, z, r } that kick the ball away
@@ -281,6 +284,55 @@ export const COURSE = {
         { x: 0, z: 5.2, r: 0.45 },
       ],
     },
+    // Added after the bonus island so earlier holes keep their numbers
+    // (a saved round remembers holes by number).
+    {
+      name: 'Island Hopper',
+      theme: 'beach',
+      par: 3,
+      tip: 'Hop over to the middle island: the sand at its far end stops the ball. Too soft or too hard and it drops into the sky.',
+      shape: [[-1.6, -1], [1.6, -1], [1.8, 2], [1.6, 4.2], [1.6, 5.6], [2.0, 6.6], [2.0, 7.8], [1.6, 8.8], [1.6, 10.2], [1.9, 12], [1.6, 14], [-1.6, 14], [-1.9, 12], [-1.6, 10.2], [-1.6, 8.8], [-2.0, 7.8], [-2.0, 6.6], [-1.6, 5.6], [-1.6, 4.2], [-1.8, 2]],
+      round: 0.5,
+      tee: [0, 0],
+      cup: [0.3, 12.4],
+      // The middle island's hollow and sand catch a wide range of putts (only
+      // near full power carries on into the second gap), and the lips either
+      // side of that gap stop a slow ball dribbling in.
+      ground: [
+        { type: 'hill', x: 0, z: 7.0, r: 1.3, h: -0.2 },
+        { type: 'ridge', axis: 'z', at: 8.8, w: 1.2, h: 0.15 },
+        { type: 'ridge', axis: 'z', at: 10.2, w: 1.0, h: 0.12 },
+      ],
+      zones: [
+        { type: 'sand', x: 0, z: 8.15, w: 4.2, d: 1.2, rect: true },
+      ],
+      gaps: [
+        { z1: 4.2, z2: 5.6, split: true },
+        { z1: 8.8, z2: 10.2, split: true },
+      ],
+    },
+    {
+      name: 'Rope Bridge',
+      theme: 'blossom',
+      par: 3,
+      tip: 'No rails on the bridge, and it sags in the middle. Keep it straight or over the side it goes.',
+      shape: [[-1.7, -1], [1.7, -1], [1.9, 1.5], [1.5, 3], [0.7, 3.2], [0.7, 9.0], [1.5, 9.2], [1.9, 11.5], [1.6, 13.8], [-1.6, 13.8], [-1.9, 11.5], [-1.5, 9.2], [-0.7, 9.0], [-0.7, 3.2], [-1.5, 3], [-1.9, 1.5]],
+      round: 0.4,
+      tee: [0, 0],
+      cup: [-0.3, 12.0],
+      // The bridge sags along its length, and a little across it too, so a
+      // ball slightly off line drifts back towards the middle.
+      ground: [
+        { type: 'hill', x: 0, z: 6.1, rx: 2.5, rz: 2.9, h: -0.22 },
+      ],
+      ropeBridges: [
+        { z1: 3.6, z2: 8.6 },
+      ],
+      // Stops a full-power putt off the back rail rolling back into the cup.
+      zones: [
+        { type: 'sand', x: -0.3, z: 13.0, w: 2.6, d: 1.0 },
+      ],
+    },
   ],
 };
 
@@ -296,12 +348,12 @@ export const MAP = {
   stages: [
     ['Welcome Hill'],
     ['The Gap', 'Mushroom Grove'],
-    ['Dogleg Bowl'],
+    ['Dogleg Bowl', 'Island Hopper'],
     ['Duck Pond', 'Cherry Terraces'],
     ['Windmill'],
     ['Volcano', 'Crystal Sweepers'],
     ['Switchback'],
-    ['Frozen Island'],
+    ['Frozen Island', 'Rope Bridge'],
     ['Warp Finale'],
   ].map(stage => stage.map(name => COURSE.holes.findIndex(h => h.name === name))),
   bonus: { hole: COURSE.holes.findIndex(h => h.name === 'Cloud Island'), from: [2, 5] },
