@@ -1,7 +1,7 @@
 // Putting and what the ball does: physics events, penalties, sinking and
 // where to draw it.
 import { Vector3 } from '../vendor/three.module.min.js';
-import { $, game, world, holes, MAX_STROKES } from './state.js';
+import { $, game, world, holes, MAX_STROKES, STAGES } from './state.js';
 import { STEP, BALL_R } from './physics.js';
 import { smooth } from './terrain.js';
 import { sfx } from './audio.js';
@@ -74,7 +74,8 @@ function onPhysicsEvent(ev) {
     sfx.cup();
     const hole = holes[game.holeIndex];
     if (game.strokes <= hole.par) world.confetti(...hole.cup);
-    if (hole.theme === 'night') world.fireworks(...hole.cup);
+    // Fireworks for finishing the round.
+    if (!game.onBonus && game.stage === STAGES - 1) world.fireworks(...hole.cup);
     finishHole(game.strokes);
   } else if (ev.type === 'water' || ev.type === 'fall') {
     // Same penalty for both: +1 stroke, back to where you played from.
