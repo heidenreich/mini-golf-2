@@ -91,8 +91,10 @@ function setInert(on) {
   for (const id of ['hud', 'cam-controls', 'game']) $(id).inert = on;
 }
 
-export function showCard(html, { clear = false } = {}) {
+// `wide` lets a card spread into two columns on a big screen.
+export function showCard(html, { clear = false, wide = false } = {}) {
   $('card').innerHTML = html;
+  $('card').classList.toggle('wide', wide);
   const ov = $('overlay');
   ov.classList.add('show');
   ov.classList.toggle('clear', clear);

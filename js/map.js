@@ -43,6 +43,10 @@ export function mapSvg(choices = []) {
       if (took(a, MAP.bonus.hole) || open) line(a, MAP.bonus.hole, `bridge gold ${open ? 'open' : 'taken'}`);
     }
   }
+  // And on from the bonus island to wherever you went next, so the route
+  // stays joined up.
+  const after = order[order.indexOf(MAP.bonus.hole) + 1];
+  if (order.includes(MAP.bonus.hole) && after != null) line(MAP.bonus.hole, after, 'bridge gold taken');
   const nodes = holes.map((h, i) => {
     const { x, y } = mapSpot(i);
     const c = islandColors(i);

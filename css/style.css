@@ -244,6 +244,18 @@ body.aiming #hud-name { visibility: hidden; }
 .card .sub { opacity: 0.8; }
 .card .big { font-size: 44px; font-weight: 700; margin: 4px 0; }
 .card .new-best { color: var(--good); font-weight: 600; }
+/* The end of a round: score and scorecard beside the route map when there's
+   room (desktop, tablet), stacked on a phone. */
+@media (min-width: 760px) and (min-height: 540px) {
+  .card.wide {
+    width: min(860px, 100%);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    align-items: center;
+  }
+  .card.wide .final-map .map { max-width: 380px; margin: 0 auto; }
+}
 .card .bonus-note { margin: 8px 0 0; padding: 8px 12px; border-radius: 12px; background: #fff4c9; font-size: 15px; }
 .card .buttons { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
 .card .btn {

@@ -289,17 +289,21 @@ function showFinal() {
   }
   world.cam.overview = true;
   world.showMarker = false;
+  // Score, scorecard and buttons first, then the map of your route: side by
+  // side on a big screen, one under the other on a phone.
   showCard(`
-    <h2>Round complete</h2>
-    <div class="big">${t.strokes}</div>
-    <p>${relName(t.diff)} against par ${t.par} for your route</p>
-    ${isBest ? '<p class="new-best">New best round!</p>' : `<p class="sub">${bestText(data)}</p>`}
-    ${mapSvg()}
-    ${scorecardHtml()}
-    <div class="buttons">
-      <button class="btn primary" data-act="play">Play again</button>
-      <button class="btn" data-act="title">Title screen</button>
-    </div>`);
+    <div class="final-score">
+      <h2>Round complete</h2>
+      <div class="big">${t.strokes}</div>
+      <p>${relName(t.diff)} against par ${t.par} for your route</p>
+      ${isBest ? '<p class="new-best">New best round!</p>' : `<p class="sub">${bestText(data)}</p>`}
+      ${scorecardHtml()}
+      <div class="buttons">
+        <button class="btn primary" data-act="play">Play again</button>
+        <button class="btn" data-act="title">Title screen</button>
+      </div>
+    </div>
+    <div class="final-map">${mapSvg()}</div>`, { wide: true });
 }
 
 // Opens from play, from the end-of-hole card or while choosing a path, and
