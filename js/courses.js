@@ -295,14 +295,16 @@ export const COURSE = {
       round: 0.5,
       tee: [0, 0],
       cup: [0.3, 12.4],
-      // A full-power putt can clear both gaps; anything a bit less lands in
-      // the sand or drops into the second gap.
+      // The middle island's hollow and sand catch a wide range of putts (only
+      // near full power carries on into the second gap), and the lips either
+      // side of that gap stop a slow ball dribbling in.
       ground: [
         { type: 'hill', x: 0, z: 7.0, r: 1.3, h: -0.2 },
         { type: 'ridge', axis: 'z', at: 8.8, w: 1.2, h: 0.15 },
+        { type: 'ridge', axis: 'z', at: 10.2, w: 1.0, h: 0.12 },
       ],
       zones: [
-        { type: 'sand', x: 0, z: 8.3, w: 4.2, d: 0.9, rect: true },
+        { type: 'sand', x: 0, z: 8.15, w: 4.2, d: 1.2, rect: true },
       ],
       gaps: [
         { z1: 4.2, z2: 5.6, split: true },
@@ -325,6 +327,10 @@ export const COURSE = {
       ],
       ropeBridges: [
         { z1: 3.6, z2: 8.6 },
+      ],
+      // Stops a full-power putt off the back rail rolling back into the cup.
+      zones: [
+        { type: 'sand', x: -0.3, z: 13.0, w: 2.6, d: 1.0 },
       ],
     },
   ],

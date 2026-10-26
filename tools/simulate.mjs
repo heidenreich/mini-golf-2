@@ -57,9 +57,10 @@ function cost(hole, from, r) {
   return estimate(hole, r.x, r.z);
 }
 
-// Finds the best few shots if hit perfectly (a coarse search, then a finer
-// one round the best), then keeps the one that does best on average when
-// missed by this player's usual amount.
+// Searches every direction and strength, then tries a spread of the shots
+// that look nearly as good as the best when hit perfectly, each missed by
+// this player's usual amount, and keeps the one that does best on average.
+// (So it aims for the middle of a safe window, not its edge.)
 function chooseShot(hole, sim, skill) {
   const from = [sim.ball.x, sim.ball.z];
   const toCup = Math.atan2(hole.cup[0] - from[0], hole.cup[1] - from[1]);
@@ -69,20 +70,18 @@ function chooseShot(hole, sim, skill) {
   for (let da = -36; da <= 36; da += 4) {
     for (let p = 0.05; p <= 1.001; p += 0.05) coarse.push(tryShot(toCup + da * deg, p));
   }
-  // Of shots that are equally good if hit perfectly, the gentler is safer.
-  const better = (x, y) => x.c - y.c || x.p - y.p;
-  coarse.sort(better);
-  const fine = [...coarse.slice(0, 4)];
-  for (const c of coarse.slice(0, 4)) {
-    for (let da = -2; da <= 2; da += 1) {
-      for (let dp = -0.02; dp <= 0.021; dp += 0.01) {
-        if (da || Math.abs(dp) > 1e-9) fine.push(tryShot(c.a + da * deg, Math.min(1, Math.max(0.02, c.p + dp))));
-      }
-    }
+  coarse.sort((x, y) => x.c - y.c);
+  // A finer look round the very best, for shots that need precision.
+  const cands = coarse.slice(0, 3);
+  for (const c of coarse.slice(0, 3)) {
+    for (const [da, dp] of [[-2, 0], [2, 0], [0, -0.02], [0, 0.02]]) cands.push(tryShot(c.a + da * deg, Math.min(1, Math.max(0.02, c.p + dp))));
   }
-  fine.sort(better);
+  // And an even spread of everything nearly as good.
+  const good = coarse.filter(c => c.c <= coarse[0].c + 0.35).sort((x, y) => x.p - y.p || x.a - y.a);
+  const n = Math.min(12, good.length);
+  for (let i = 0; i < n; i++) cands.push(good[Math.floor((i * good.length) / n)]);
   let best = null;
-  for (const c of fine.slice(0, 6)) {
+  for (const c of cands) {
     let total = 0;
     for (let k = 0; k < 10; k++) {
       const a = c.a + gauss() * skill.angle, p = Math.min(1, Math.max(0.02, c.p * (1 + gauss() * skill.power)));
