@@ -33,9 +33,9 @@ Each hole sits on its own themed floating island: a wobbly outline with bays and
 | 8 | *or* Rope Bridge | 3 | Cherry blossom | Putt along a sagging plank bridge with no rails; roll off the side and it falls (+1 stroke) |
 | 9 | Warp Finale | 3 | Night | Sliding blocks, or a warp pipe up the ramp |
 | 9 | *or* Drawbridge | 3 | Volcanic island | A rope bridge with a block sliding back and forth across it; time it or get knocked off |
-| ★ | Cloud Island (bonus) | 2 | Cloud | Puffy cloud cushions bounce the ball back. Reached by a golden bridge after a birdie on stage 3 or 6. Par or better wins a **mulligan**: later in the round, tap the golden ball (or press M) after a putt to take it again, with that putt and any penalty it cost not counting. The score here only counts if it's a birdie or better, so the bonus island never costs you |
+| ★ | Cloud Island (bonus) | 2 | Cloud | Puffy cloud cushions bounce the ball back. Reached by a golden bridge after a hole-in-one on any island before the last. Par or better wins a **mulligan**: later in the round, tap the golden ball (or press M) after a putt to take it again, with that putt and any penalty it cost not counting. The score here only counts if it's a hole-in-one, so the bonus island never costs you |
 
-**The golden bridge.** Make a birdie (or better) on Dogleg Bowl or on stage 6 and a golden bridge opens to Cloud Island, a bonus hole played before you carry on: a chance to win strokes back. You can visit it once a round.
+**The golden bridge.** Every island but the last has a golden bridge with a padlock on it. Make a hole-in-one and it opens to Cloud Island, a bonus hole played before you carry on, where par or better wins a mulligan. You can visit it once a round.
 
 Scores are measured against par for the route you took; your best round (to par) is saved in your browser.
 

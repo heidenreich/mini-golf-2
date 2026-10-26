@@ -363,6 +363,7 @@ body.aiming #hud-name { visibility: hidden; }
 .map .island.choice:focus { outline: none; }
 .map .island.choice:focus .halo { stroke: var(--ink); stroke-width: 4; }
 .map .island.under .score { fill: #b8ffd9; }
+.map .island.pale .score { fill: var(--ink); stroke: rgba(255, 255, 255, 0.85); }
 .map .island.over .score { fill: #ffd1dc; }
 @keyframes map-pulse { 50% { fill: rgba(255, 210, 63, 0.1); } }
 @media (prefers-reduced-motion: reduce) { .map .island.choice .halo { animation: none; } }

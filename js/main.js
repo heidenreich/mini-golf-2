@@ -27,9 +27,9 @@ function showMap({ browse = false } = {}) {
   const golden = choices.some(c => c.kind === 'gold');
   showCard(`
     <h2>${browse ? 'Course map' : 'Where next?'}</h2>
-    <p class="sub">${browse ? 'Your route so far' : golden ? 'Your birdie opened the golden bridge to the bonus island!' : 'Tap the island to cross to next.'}</p>
+    <p class="sub">${browse ? 'Your route so far' : golden ? 'Your hole-in-one opened the golden bridge to the bonus island!' : 'Tap the island to cross to next.'}</p>
     ${mapSvg(choices)}
-    <p class="legend"><span class="key gold"></span> Golden bridges open with a birdie on the island before.</p>
+    <p class="legend"><span class="key gold"></span> A hole-in-one opens a golden bridge to the bonus island.</p>
     <div class="buttons">
       ${browse ? '<button class="btn primary" data-act="menu">Back</button>' : ''}
     </div>`);
@@ -50,7 +50,7 @@ function choosePath() {
     const h = holes[l.hole];
     const theme = (THEMES[h.theme] || THEMES.meadow).name;
     if (l.kind === 'locked') {
-      return `<div class="path-choice locked" data-n="${n}"><b>${h.name}</b><span>Bonus island &middot; birdie to open</span></div>`;
+      return `<div class="path-choice locked" data-n="${n}"><b>${h.name}</b><span>Bonus island &middot; hole-in-one to open</span></div>`;
     }
     return `<button class="path-choice ${l.kind === 'gold' ? 'gold' : ''}" data-n="${n}" data-go="${l.hole}">
       <b>${h.name}</b><span>Par ${h.par} &middot; ${l.kind === 'gold' ? 'bonus: win a mulligan' : theme}</span></button>`;
@@ -180,7 +180,7 @@ function showTitle() {
     <ul class="how">
       <li>Drag back from the ball and let go to putt. Pull further for more power.</li>
       <li>Drag anywhere else to look round. Pinch to zoom.</li>
-      <li>After each hole, choose which island to cross to next. A birdie can open a golden bridge.</li>
+      <li>After each hole, choose which island to cross to next. A hole-in-one opens a golden bridge to a bonus island.</li>
     </ul>`, { clear: true });
 }
 
@@ -243,13 +243,13 @@ export function finishHole(score, note = '') {
     const won = score <= hole.par;
     if (won) game.mulligans = 1;
     bonusNote = `<p class="bonus-note">${won ? '<b>You won a mulligan!</b> Tap the golden ball after a bad putt to take it again.' : 'No mulligan this time.'}
-      ${score < hole.par ? ' And your birdie comes off your score.' : ' This hole doesn\'t count against your score.'}</p>`;
+      ${score < hole.par ? ' And your hole-in-one comes off your score.' : ' This hole doesn\'t count against your score.'}</p>`;
   }
   updateHud();
   const last = !game.onBonus && game.stage === STAGES - 1;
   const d = score - hole.par;
   if (d < 0 || score === 1) sfx.cheer(score === 1 ? 3 : -d);
-  // A birdie on a golden-bridge island opens the way to the bonus island.
+  // A hole-in-one opens the way to the bonus island.
   game.links = nextChoices();
   if (game.links.some(l => l.kind === 'gold')) {
     world.unlockGold();

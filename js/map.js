@@ -35,10 +35,12 @@ export function mapSvg(choices = []) {
   for (let s = 0; s < STAGES - 1; s++) {
     for (const a of MAP.stages[s]) for (const b of MAP.stages[s + 1]) line(a, b, took(a, b) ? 'bridge taken' : 'bridge');
   }
+  // A golden bridge can lead from any island, so only the one you opened or
+  // took is drawn (all of them would bury the map).
   for (const s of MAP.bonus.from) {
     for (const a of MAP.stages[s]) {
       const open = choiceOf.get(MAP.bonus.hole) && game.holeIndex === a;
-      line(a, MAP.bonus.hole, `bridge gold ${took(a, MAP.bonus.hole) ? 'taken' : open ? 'open' : ''}`);
+      if (took(a, MAP.bonus.hole) || open) line(a, MAP.bonus.hole, `bridge gold ${open ? 'open' : 'taken'}`);
     }
   }
   const nodes = holes.map((h, i) => {
@@ -51,7 +53,9 @@ export function mapSvg(choices = []) {
     const d = v && v.score != null ? v.score - h.par : 0;
     const bonus = i === MAP.bonus.hole;
     const locked = bonus && !choice && !visited.has(i);
-    const cls = ['island', choice ? 'choice' : '', v ? 'visited' : '', here ? 'here' : '', locked ? 'locked' : '', d < 0 ? 'under' : d > 0 ? 'over' : ''].join(' ');
+    // White score text doesn't show on a pale island (the cloud), so dark it is.
+    const pale = (THEMES[h.theme] || THEMES.meadow).ground.grassA.getHSL({}).l > 0.75;
+    const cls = ['island', choice ? 'choice' : '', v ? 'visited' : '', here ? 'here' : '', locked ? 'locked' : '', pale ? 'pale' : '', d < 0 ? 'under' : d > 0 ? 'over' : ''].join(' ');
     const attrs = choice ? ` data-go="${i}" role="button" tabindex="0" aria-label="Go to ${h.name}, par ${h.par}"` : '';
     return `<g class="${cls}" transform="translate(${x},${y})"${attrs}>
       <ellipse class="halo" rx="27" ry="21"/>

@@ -277,7 +277,7 @@ export const COURSE = {
       theme: 'cloud',
       bonus: true,
       par: 2,
-      tip: 'Bonus island! Par or better wins a mulligan, and a birdie comes off your score. Bank it round the puff.',
+      tip: 'Bonus island! Par or better wins a mulligan, and a hole-in-one comes off your score. Bank it round the puff.',
       shape: cloud(0, 5, 2.8, 5.2),
       round: 0.5,
       tee: [0, 0.6],
@@ -419,9 +419,9 @@ for (const hole of COURSE.holes) {
 }
 
 // The islands are linked by rope bridges. A round crosses nine stages;
-// where a stage has two islands you pick one. A birdie on a `from` stage
-// opens a golden bridge to the bonus island, played as an extra hole
-// before carrying on.
+// where a stage has two islands you pick one. A hole-in-one on a `from`
+// stage (any but the last) opens a golden bridge to the bonus island,
+// played as an extra hole before carrying on, once a round.
 export const MAP = {
   stages: [
     ['Welcome Hill'],
@@ -434,5 +434,5 @@ export const MAP = {
     ['Frozen Island', 'Rope Bridge'],
     ['Warp Finale', 'Drawbridge'],
   ].map(stage => stage.map(name => COURSE.holes.findIndex(h => h.name === name))),
-  bonus: { hole: COURSE.holes.findIndex(h => h.name === 'Cloud Island'), from: [2, 5] },
+  bonus: { hole: COURSE.holes.findIndex(h => h.name === 'Cloud Island'), from: [0, 1, 2, 3, 4, 5, 6, 7] },
 };

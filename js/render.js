@@ -819,7 +819,7 @@ export class World {
 
   // Rope bridges: one comes in behind the tee, and one heads off beyond the
   // cup towards each island you can go to next. A golden one leads to the
-  // bonus island (with a padlock until a birdie opens it).
+  // bonus island (with a padlock until a hole-in-one opens it).
   buildBridges(g, hole, terrain, links) {
     this.bridgeIn = null;
     this.bridgesOut = [];
@@ -883,7 +883,7 @@ export class World {
       ctx.font = 'bold 30px Fredoka, system-ui, sans-serif';
       ctx.fillText(name, 128, 50, 236);
       ctx.font = '600 24px Fredoka, system-ui, sans-serif';
-      ctx.fillText(k === 'locked' ? 'Bonus \u00b7 birdie to open' : gilt ? `Bonus \u00b7 par ${par}` : `Par ${par}`, 128, 86, 236);
+      ctx.fillText(k === 'locked' ? 'Bonus \u00b7 hole-in-one' : gilt ? `Bonus \u00b7 par ${par}` : `Par ${par}`, 128, 86, 236);
       tex.needsUpdate = true;
     };
     paint(kind);
@@ -976,7 +976,7 @@ export class World {
     return { path, kind, dx, dz, plankMat, ropeMat, lock: this.lastLock };
   }
 
-  // A birdie opens the golden bridge: it lights up and the padlock pops off.
+  // A hole-in-one opens the golden bridge: it lights up and the padlock pops off.
   unlockGold() {
     for (const b of this.bridgesOut || []) {
       if (b.kind !== 'locked') continue;

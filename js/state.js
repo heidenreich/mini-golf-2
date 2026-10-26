@@ -66,8 +66,8 @@ export function nextChoices() {
   if (nextStage < STAGES) for (const h of MAP.stages[nextStage]) out.push({ hole: h, kind: 'next' });
   if (!game.onBonus && !game.bonusPlayed && MAP.bonus.from.includes(game.stage)) {
     const r = game.route[game.route.length - 1];
-    const birdie = r && r.hole === game.holeIndex && r.score != null && r.score < holes[r.hole].par;
-    out.push({ hole: MAP.bonus.hole, kind: birdie ? 'gold' : 'locked' });
+    const ace = r && r.hole === game.holeIndex && r.score === 1;
+    out.push({ hole: MAP.bonus.hole, kind: ace ? 'gold' : 'locked' });
   }
   return out;
 }
