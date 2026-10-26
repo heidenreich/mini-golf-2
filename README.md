@@ -10,7 +10,7 @@ No build step. The only dependency is [three.js](https://threejs.org/) r160, ven
 
 ## Course
 
-**Sky Islands**: 15 floating islands linked by rope bridges. A round crosses nine of them. Each bridge has a signpost naming the island it leads to. Where a stage has two islands you choose: the camera looks out over the bridges, you tap the label over the one you want, and it flies you across. With only one way on, it flies you straight there. The pause menu shows the whole course map and your route.
+**Sky Islands**: 18 floating islands linked by rope bridges. A round crosses nine of them. Each bridge has a signpost naming the island it leads to. Where a stage has two islands you choose: the camera looks out over the bridges, you tap the label over the one you want, and it flies you across. With only one way on, it flies you straight there. The pause menu shows the whole course map and your route.
 
 Each hole sits on its own themed floating island: a wobbly outline with bays and headlands, an underside of earth and rock hanging into the sky, things dangling off the edge (vines, roots, icicles, crystals or lava), waterfalls on the greener islands, wisps of cloud round the base and small rocks drifting alongside. The fairways have rounded, cloud-soft outlines; rails stay straight where a hole is built around bank shots or moving blocks.
 
@@ -24,12 +24,15 @@ Each hole sits on its own themed floating island: a wobbly outline with bays and
 | 4 | Duck Pond | 3 | Lily pond | A pond in the middle (+1 stroke, ball returns), a bunker, bumpers behind the cup |
 | 4 | *or* Cherry Terraces | 3 | Cherry blossom | Climb two terraces; too soft rolls back down a level |
 | 5 | Windmill | 3 | Tulip fields | Through the door between the turning sails, or round either side |
+| 5 | *or* Stepping Stones | 4 | Lily pond | Hop across zigzagging mossy stones with sky between, every hop on an angle |
 | 6 | Volcano | 3 | Volcanic island | The cup sits in a crater on a hill |
 | 6 | *or* Crystal Sweepers | 3 | Crystal caves | Two spinning crystal bars to time your putt past |
 | 7 | Switchback | 4 | Tropical beach | Downhill round two corners, past a bunker, over a ridge |
+| 7 | *or* Moon Hop | 3 | The Moon | Low gravity: the ball rolls on and on and barely feels the slopes, across craters to a cup up a crater's side |
 | 8 | Frozen Island | 3 | Winter | The whole fairway is frozen; ponds either side of an ice bridge |
 | 8 | *or* Rope Bridge | 3 | Cherry blossom | Putt along a sagging plank bridge with no rails; roll off the side and it falls (+1 stroke) |
-| 9 | Warp Finale | 3 | Night | Sliding blocks, or a warp pipe up the ramp; fireworks when you hole out |
+| 9 | Warp Finale | 3 | Night | Sliding blocks, or a warp pipe up the ramp |
+| 9 | *or* Drawbridge | 3 | Volcanic island | A rope bridge with a block sliding back and forth across it; time it or get knocked off |
 | ★ | Cloud Island (bonus) | 2 | Cloud | Puffy cloud cushions bounce the ball back. Reached by a golden bridge |
 
 **The golden bridge.** Make a birdie (or better) on Dogleg Bowl or on stage 6 and a golden bridge opens to Cloud Island, a bonus hole played before you carry on: a chance to win strokes back. You can visit it once a round.
@@ -86,8 +89,10 @@ How it works:
 - **Rounded fairways.** Holes are drawn as simple outlines and `round` (in each hole's data) turns every corner into a curve before play, so the rails, physics and drawing all use the same smooth shape.
 - **Reading slopes.** The ground is shaded by height and steepness, with contour lines every 10 cm of height on sloping ground, and the sun shines from behind the tee so slopes facing you light up.
 - **Timestep:** fixed at 240 Hz, with sub-steps of under half a ball radius so a fast ball can't pass through a rail.
-- **Cup:** a ball slower than `CUP_CAPTURE_SPEED` drops in; a faster one dips over the lip, curls and carries on.
+- **Cup:** a ball slower than `CUP_CAPTURE_SPEED` drops in; a faster one dips over the lip, curls and carries on. Holing out on the last stage sets off fireworks.
 - **Gaps:** reach the edge moving faster than `GAP_MIN_SPEED` (across the gap) and the ball flies over with nothing slowing it, drawn in an arc; slower and it drops in.
+- **Low gravity:** a hole's `gravity` (0.35 on the Moon) scales the pull down slopes and the rolling resistance, so the ball rolls much further. The cup holds it less well too: the capture speed scales with the square root of gravity.
+- **Narrow gaps** can set their own `minSpeed`, below `GAP_MIN_SPEED`. Stepping Stones uses this with a mossy surface (between grass and sand) so a hop can land and stop on a small stone.
 - **Open edges:** a rope bridge, or a gap marked `split`, cuts the island right through and has no rails. A ball that leaves the fairway there falls (+1 stroke), where anywhere else it would just be put back.
 - **Windmills:** the building is ordinary walls with a tunnel through it. While a sail hangs within `WINDMILL_GATE` of straight down, a gate across the doorway bounces the ball back.
 - **Bumpers** bounce like rails and then add `BUMPER_KICK` of speed. **Warp pipes** take any ball slower than `PIPE_MAX_SPEED` and fire it out of the far pipe at least `PIPE_MIN_OUT` fast.

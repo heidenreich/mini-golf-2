@@ -14,14 +14,15 @@ import { roundShape } from './terrain.js';
 //               ramp   { axis, from, to, rise }     a smooth step from one level to another
 //               hill   { x, z, r | rx, rz, h }      a round bump (negative h makes a bowl)
 //               ridge  { axis, at, w, h }           a bump running all the way across
-//   zones     sand / water / ice: ellipses { x, z, w, d } centred on x, z,
+//   zones     sand / water / ice / moss: ellipses { x, z, w, d } centred on x, z,
 //             or add rect: true for a rectangle
 //   walls     extra wall segments [x1, z1, x2, z2]
 //   spinners  rotating bars { x, z, len (half-length), speed (rad/s), phase }
 //   movers    blocks { x1, z1, x2, z2, w, d, period, phase } gliding between two points
 //   gaps      chasms right across the hole { z1, z2 }: reach the edge fast
 //             enough and the ball flies over, too slow and it drops in (+1 stroke).
-//             split: true opens the island right through, with sky below
+//             split: true opens the island right through, with sky below;
+//             minSpeed overrides how fast the ball must be going to clear it
 //   ropeBridges  { z1, z2 }: between z1 and z2 the fairway is a plank bridge
 //             with no rails; roll off the side and it falls (+1 stroke)
 //   windmills { x, z, w, d, door, period, phase }: a building with a tunnel
@@ -32,6 +33,8 @@ import { roundShape } from './terrain.js';
 //             `from`, pop out at `to` heading along dir (radians, 0 = +z)
 //   tip       shown when the hole starts
 //   surface   the fairway's surface where no zone says otherwise (default grass)
+//   gravity   a fraction of normal gravity (the Moon): weaker slopes, and the
+//             ball rolls further
 //   theme     the island's look (see themes.js): meadow, desert, autumn, pond,
 //             tulips, volcano, beach, winter or night
 
@@ -333,6 +336,81 @@ export const COURSE = {
         { type: 'sand', x: -0.3, z: 13.0, w: 2.6, d: 1.0 },
       ],
     },
+    {
+      name: 'Stepping Stones',
+      theme: 'pond',
+      par: 4,
+      tip: 'Hop from stone to stone. They zigzag, so every hop is on an angle.',
+      // Four little islands, each offset from the last, with short hops of
+      // open sky between. Moss and a shallow hollow settle the ball on each
+      // stone.
+      shape: [
+        [-1.7, -1], [0.6, -1], [0.6, 2.9],
+        [2.1, 3.8], [2.1, 6.2],
+        [0.3, 7.1], [0.3, 9.5],
+        [1.8, 10.4], [1.9, 12.2], [1.6, 14], [-0.7, 14], [-0.9, 12.2], [-0.6, 10.4],
+        [-2.1, 9.5], [-2.1, 7.1],
+        [-0.3, 6.2], [-0.3, 3.8],
+        [-1.7, 2.9],
+      ],
+      round: 0.35,
+      tee: [-0.6, 0],
+      cup: [0.5, 12.6],
+      ground: [
+        { type: 'hill', x: 0.9, z: 5.0, r: 1.0, h: -0.12 },
+        { type: 'hill', x: -0.9, z: 8.3, r: 1.0, h: -0.12 },
+      ],
+      zones: [
+        { type: 'moss', x: 0.9, z: 5.0, w: 2.6, d: 2.4, rect: true },
+        { type: 'moss', x: -0.9, z: 8.3, w: 2.6, d: 2.4, rect: true },
+      ],
+      gaps: [
+        { z1: 2.9, z2: 3.8, split: true, minSpeed: 1.5 },
+        { z1: 6.2, z2: 7.1, split: true, minSpeed: 1.5 },
+        { z1: 9.5, z2: 10.4, split: true, minSpeed: 1.5 },
+      ],
+    },
+    {
+      name: 'Moon Hop',
+      theme: 'moon',
+      gravity: 0.35,
+      par: 3,
+      tip: 'Low gravity: the ball rolls and rolls, and barely feels the slopes. The cup is up the side of a crater.',
+      shape: ellipse(0, 6.5, 3.2, 7.6, 14),
+      round: 1.2,
+      tee: [0, 0],
+      // Up the inside of the last crater, so a ball rolling in settles at
+      // the bottom rather than funnelling into the cup.
+      cup: [0.75, 12.0],
+      // Craters: a raised rim with a hollow inside.
+      ground: [
+        { type: 'hill', x: -1.1, z: 5.0, r: 1.5, h: 0.14 },
+        { type: 'hill', x: -1.1, z: 5.0, r: 0.9, h: -0.3 },
+        { type: 'hill', x: 1.3, z: 7.6, r: 1.1, h: 0.1 },
+        { type: 'hill', x: 1.3, z: 7.6, r: 0.65, h: -0.22 },
+        { type: 'hill', x: -0.3, z: 11.4, r: 2.0, h: 0.22 },
+        { type: 'hill', x: -0.3, z: 11.4, r: 1.3, h: -0.32 },
+      ],
+    },
+    {
+      name: 'Drawbridge',
+      theme: 'volcano',
+      par: 3,
+      tip: 'A block slides back and forth across the bridge. Time it, or it knocks you over the side.',
+      shape: [[-1.7, -1], [1.7, -1], [1.9, 1.5], [1.5, 3], [0.8, 3.2], [0.8, 9.6], [1.5, 9.8], [1.9, 12], [1.6, 14.2], [-1.6, 14.2], [-1.9, 12], [-1.5, 9.8], [-0.8, 9.6], [-0.8, 3.2], [-1.5, 3], [-1.9, 1.5]],
+      round: 0.4,
+      tee: [0, 0],
+      cup: [0.3, 12.4],
+      ground: [
+        { type: 'hill', x: 0, z: 6.4, rx: 2.5, rz: 3.2, h: -0.18 },
+      ],
+      ropeBridges: [
+        { z1: 3.6, z2: 9.2 },
+      ],
+      movers: [
+        { x1: -0.5, z1: 6.4, x2: 0.5, z2: 6.4, w: 0.4, d: 0.3, period: 3.6, phase: 0 },
+      ],
+    },
   ],
 };
 
@@ -350,11 +428,11 @@ export const MAP = {
     ['The Gap', 'Mushroom Grove'],
     ['Dogleg Bowl', 'Island Hopper'],
     ['Duck Pond', 'Cherry Terraces'],
-    ['Windmill'],
+    ['Windmill', 'Stepping Stones'],
     ['Volcano', 'Crystal Sweepers'],
-    ['Switchback'],
+    ['Switchback', 'Moon Hop'],
     ['Frozen Island', 'Rope Bridge'],
-    ['Warp Finale'],
+    ['Warp Finale', 'Drawbridge'],
   ].map(stage => stage.map(name => COURSE.holes.findIndex(h => h.name === name))),
   bonus: { hole: COURSE.holes.findIndex(h => h.name === 'Cloud Island'), from: [2, 5] },
 };

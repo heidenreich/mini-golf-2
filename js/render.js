@@ -17,6 +17,7 @@ const COLORS = {
   rough: new THREE.Color('#5aa63c'),
   sand: new THREE.Color('#ead59a'),
   ice: new THREE.Color('#d7f2fb'),
+  moss: new THREE.Color('#4f8f3e'),
   pondBed: new THREE.Color('#3d8a8f'),
   rail: new THREE.Color('#fbf3e4'),
   railSide: new THREE.Color('#e6d6b8'),
@@ -407,7 +408,7 @@ export class World {
     const rand = rng(99);
     const col = new THREE.Color();
     const pal = this.pal;
-    const zoneColor = { sand: COLORS.sand, ice: COLORS.ice, water: COLORS.pondBed };
+    const zoneColor = { sand: COLORS.sand, ice: COLORS.ice, water: COLORS.pondBed, moss: COLORS.moss };
     // Holes cut in the fairway: the cup and warp pipe mouths, and gaps.
     const cuts = [[cx, cz, CUP_R], ...(hole.pipes || []).map(p => [p.from[0], p.from[1], PIPE_R])];
     // Gaps, and rope bridges (drawn as planks instead of grass).
@@ -508,8 +509,11 @@ export class World {
         const open = openAt(z);
         if (open) {
           const ez = openEdge(open, z);
-          roughPos[k * 3] = x;
-          roughPos[k * 3 + 1] = terrain.height(x, ez) - ROUGH_DROP;
+          // Pulled in to the island's edge, so nothing sticks out sideways.
+          const zIn = ez + (ez === open.z1 ? -0.01 : 0.01);
+          const rx = island.inside(x, zIn) ? x : island.snap(x, zIn)[0];
+          roughPos[k * 3] = rx;
+          roughPos[k * 3 + 1] = terrain.height(rx, ez) - ROUGH_DROP;
           roughPos[k * 3 + 2] = ez;
           col.copy(pal.rough).lerp(pal.roughDark, rand() * 0.6);
           roughCol.set([col.r, col.g, col.b], k * 3);
@@ -1391,13 +1395,16 @@ export class World {
       const w = x1 - x0, mid = (x0 + x1) / 2, depth = 1.6;
       for (const z of [gp.z1, gp.z2]) {
         const y = terrain.height(mid, z);
+        // The stripe spans the fairway at the lip itself (which differs
+        // from the middle of the gap when the gap runs on a slant).
+        const [l0, l1] = spanAt(hole.shape, z + (z === gp.z1 ? -0.01 : 0.01));
         if (!gp.split) {
           const face = new THREE.Mesh(new THREE.PlaneGeometry(w, depth), dark);
           face.position.set(mid, y - depth / 2, z);
           g.add(face);
         }
-        const stripe = new THREE.Mesh(new THREE.BoxGeometry(w - 0.1, 0.02, 0.08), lambert('#ffd23f'));
-        stripe.position.set(mid, y + 0.005, z + (z === gp.z1 ? -0.04 : 0.04));
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(l1 - l0 - 0.1, 0.02, 0.08), lambert('#ffd23f'));
+        stripe.position.set((l0 + l1) / 2, terrain.height((l0 + l1) / 2, z) + 0.005, z + (z === gp.z1 ? -0.04 : 0.04));
         g.add(stripe);
       }
       // A split gap opens onto the sky: nothing more to draw.

@@ -20,8 +20,7 @@ import { insidePolygon } from './terrain.js';
 //   drift     particles in the air: snow, leaves, embers, fireflies...
 //   extras    (api) => optional per-frame update(dt, time): the theme's
 //             signature pieces (ducks, tulip fields, lava, stars)
-//   night     dark sky: rails, posts, pipes and the ball glow, and holing
-//             out sets off fireworks
+//   night     dark sky: rails, posts, pipes and the ball glow
 
 // ---- Shared helpers ---------------------------------------------------------
 
@@ -486,6 +485,29 @@ function starField(api) {
   return (dt, time) => { stars.material.opacity = 0.75 + 0.25 * Math.sin(time * 1.3); };
 }
 
+// Stars, and the Earth hanging in the sky.
+function moonSky(api) {
+  const twinkle = starField(api);
+  const earth = new THREE.Group();
+  const sea = new THREE.Mesh(new THREE.SphereGeometry(4, 32, 20), new THREE.MeshBasicMaterial({ color: '#2f78d0', fog: false }));
+  earth.add(sea);
+  const rand = rng(5);
+  const land = new THREE.MeshBasicMaterial({ color: '#4fae5a', fog: false });
+  for (let i = 0; i < 7; i++) {
+    const blob = new THREE.Mesh(new THREE.SphereGeometry(1 + rand() * 1.2, 10, 8), land);
+    const a = rand() * Math.PI * 2, e = (rand() - 0.5) * 2;
+    blob.position.set(Math.cos(a) * Math.cos(e) * 3.2, Math.sin(e) * 3.2, Math.sin(a) * Math.cos(e) * 3.2);
+    blob.scale.setScalar(0.9);
+    earth.add(blob);
+  }
+  earth.position.set(api.bounds.cx - 30, 32, api.bounds.cz + 70);
+  api.group.add(earth);
+  return (dt, time) => {
+    twinkle(dt, time);
+    earth.rotation.y = time * 0.05;
+  };
+}
+
 // ---- The themes -------------------------------------------------------------------------
 
 const SUMMER_SKY = { top: '#5fb3ec', bottom: '#d9f0ff', fog: '#d9f0ff', hemi: ['#e4f3ff', '#5f8a3e', 0.95], sun: ['#fff6e0', 2.7] };
@@ -680,6 +702,21 @@ export const THEMES = {
     flora: { count: 40, make: rand => makeFlower(rand, ['#b39cff', '#8fd3ff']) },
     drift: { kind: 'hover', count: 40, colors: ['#fff27a', '#d4ff6a'], size: 0.08, glow: true },
     extras: starField,
+  },
+
+  moon: {
+    name: 'The Moon',
+    night: true,
+    ground: {
+      grassA: C('#c4c4cc'), grassB: C('#b8b8c1'), green: C('#d2d2da'),
+      rough: C('#8e8e98'), roughDark: C('#777781'),
+      dirtTop: C('#6e6e78'), dirt: C('#585862'), rock: C('#4a4a52'),
+    },
+    sky: { top: '#02030a', bottom: '#0c1024', fog: '#0c1024', hemi: ['#d8dcff', '#2a2a33', 0.8], sun: ['#ffffff', 2.4] },
+    chasm: { wall: '#3a3a42', floor: '#101014' },
+    scenery: (api, rand) => makeRock(rand, pick(rand, ['#9a9aa4', '#85858f', '#a8a8b2'])),
+    flora: { count: 0 },
+    extras: moonSky,
   },
 };
 

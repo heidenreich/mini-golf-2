@@ -30,6 +30,7 @@ export const SURFACES = {
   sand:  { k: 2.6, decel: 4.2 },
   ice:   { k: 0.06, decel: 0.12 },
   frost: { k: 0.22, decel: 0.5 },      // a frozen fairway: slick, but you can still judge it
+  moss:  { k: 2.0, decel: 3.0 },       // soft: settles a ball on a small stepping stone
   water: { k: 0.32, decel: 0.8 },
 };
 
@@ -192,17 +193,21 @@ export class Sim {
     // nothing slowing it; too slow and it drops in.
     const gap = this.gapAt(b.z);
     if (gap && !this.air) {
-      if (Math.abs(b.vz) < GAP_MIN_SPEED) return { type: 'fall' };
+      if (Math.abs(b.vz) < (gap.minSpeed || GAP_MIN_SPEED)) return { type: 'fall' };
       this.air = { gap, from: b.vz > 0 ? gap.z1 : gap.z2, to: b.vz > 0 ? gap.z2 : gap.z1 };
     } else if (!gap && this.air) {
       this.air = null;
     }
 
-    const surf = SURFACES[this.terrain.surfaceAt(b.x, b.z)] || SURFACES.grass;
+    // Low gravity (the Moon) weakens both the pull down slopes and the
+    // rolling resistance, which comes from the ball's weight.
+    const grav = this.hole.gravity || 1;
+    const base = SURFACES[this.terrain.surfaceAt(b.x, b.z)] || SURFACES.grass;
+    const surf = grav === 1 ? base : { k: base.k, decel: base.decel * grav };
     const [gx, gz] = this.terrain.grad(b.x, b.z);
     const norm = 1 + gx * gx + gz * gz;
-    const ax = (-GRAVITY * ROLLING * gx) / norm;
-    const az = (-GRAVITY * ROLLING * gz) / norm;
+    const ax = (-GRAVITY * grav * ROLLING * gx) / norm;
+    const az = (-GRAVITY * grav * ROLLING * gz) / norm;
     const slopePull = Math.hypot(ax, az);
 
     let sp = Math.hypot(b.vx, b.vz);
@@ -262,7 +267,8 @@ export class Sim {
     if (d >= CUP_R) return null;
     const sp = Math.hypot(b.vx, b.vz);
     // Dead centre forgives a little more pace than a ball clipping the edge.
-    const limit = CUP_CAPTURE_SPEED * (d < CUP_R * 0.4 ? 1.4 : 1);
+    // In low gravity the ball is held in less, so it lips out more easily.
+    const limit = CUP_CAPTURE_SPEED * Math.sqrt(this.hole.gravity || 1) * (d < CUP_R * 0.4 ? 1.4 : 1);
     if (sp < limit) return { type: 'cup' };
     // Too fast: the ball dips over the lip, gets tugged towards the middle
     // and loses a little speed, so a near miss curls rather than flies on.
