@@ -6,6 +6,7 @@ import { STEP, BALL_R } from './physics.js';
 import { smooth } from './terrain.js';
 import { sfx } from './audio.js';
 import { toast, updateHud } from './ui.js';
+import { saveRound } from './storage.js';
 import { cancelDrag } from './input.js';
 import { finishHole } from './main.js';
 
@@ -14,6 +15,7 @@ const SETTLE_TIME = 0.3;        // a roll ends once the ball has been still this
 export function shoot(angle, power) {
   if (game.mode !== 'aim' || game.paused || game.sim.moving) return;
   game.lastRest = [game.sim.ball.x, game.sim.ball.z];
+  game.undo = { x: game.sim.ball.x, z: game.sim.ball.z, strokes: game.strokes };
   game.sim.shoot(angle, power);
   game.strokes++;
   game.mode = 'rolling';
@@ -24,6 +26,21 @@ export function shoot(angle, power) {
   $('hint').hidden = true;
   sfx.putt(power);
   updateHud();
+}
+
+// Spends the mulligan: the ball goes back to where the last putt was played
+// from, and that putt (and any penalty it cost) doesn't count.
+export function useMulligan() {
+  const u = game.undo;
+  if (!game.mulligans || !u || game.mode !== 'aim' || game.paused) return;
+  game.mulligans = 0;
+  game.undo = null;
+  game.sim.place(u.x, u.z);
+  game.lastRest = [u.x, u.z];
+  game.strokes = u.strokes;
+  updateHud();
+  saveRound();
+  toast('Mulligan! Take that putt again');
 }
 
 export function pickUp() {

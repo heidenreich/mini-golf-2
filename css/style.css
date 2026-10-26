@@ -128,6 +128,31 @@ body.aiming #hud-name { visibility: hidden; }
   gap: 10px;
 }
 
+/* The mulligan won on the bonus island: bottom left, clear of the camera
+   buttons, until it's used. */
+#mulligan {
+  position: fixed;
+  left: calc(10px + env(safe-area-inset-left, 0px));
+  bottom: calc(28px + var(--safe-bottom));
+  height: 44px;
+  padding: 0 14px 0 8px;
+  gap: 8px;
+  background: #fff4c9;
+  border: 2px solid #e0a800;
+  font-weight: 600;
+}
+#mulligan:disabled { opacity: 0.6; cursor: default; }
+#mulligan:not(:disabled) { animation: mulligan-glow 1.6s ease-in-out infinite; }
+@keyframes mulligan-glow { 50% { box-shadow: 0 0 0 4px rgba(255, 210, 63, 0.45), var(--shadow); } }
+@media (prefers-reduced-motion: reduce) { #mulligan:not(:disabled) { animation: none; } }
+.gold-ball {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff6c2, #ffd23f 45%, #c99400);
+  box-shadow: inset 0 -1px 2px rgba(0, 0, 0, 0.2);
+}
+
 /* At the top, under the score chips: pulling back from the ball takes your
    finger down the screen, so anything lower would be under it. */
 #power {
@@ -219,6 +244,7 @@ body.aiming #hud-name { visibility: hidden; }
 .card .sub { opacity: 0.8; }
 .card .big { font-size: 44px; font-weight: 700; margin: 4px 0; }
 .card .new-best { color: var(--good); font-weight: 600; }
+.card .bonus-note { margin: 8px 0 0; padding: 8px 12px; border-radius: 12px; background: #fff4c9; font-size: 15px; }
 .card .buttons { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
 .card .btn {
   height: 48px;
@@ -237,6 +263,7 @@ body.aiming #hud-name { visibility: hidden; }
 .scorecard th { font-weight: 500; opacity: 0.8; }
 .scorecard td.under { color: var(--good); font-weight: 700; }
 .scorecard td.over { color: var(--accent-ink); font-weight: 700; }
+.scorecard td.void { opacity: 0.45; text-decoration: line-through; font-weight: 500; }
 .scorecard td.current { background: #ffe9a8; box-shadow: inset 0 0 0 2px #e0b43c; }
 
 .noscript { position: fixed; inset: 0; display: grid; place-items: center; margin: 0; font-size: 18px; }

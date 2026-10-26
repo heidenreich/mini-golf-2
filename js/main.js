@@ -7,7 +7,7 @@ import { Sim, STEP } from './physics.js';
 import { $, canvas, world, holes, STAGES, MAX_STROKES, game, nextChoices, totals } from './state.js';
 import { load, save, saveRound, savedRound, clearRound } from './storage.js';
 import { ac, sfx, soundIsOn, setSound } from './audio.js';
-import { toast, relName, scoreWord, updateHud, scorecardHtml, fade, bestText, showCard, hideCard, setPlaying } from './ui.js';
+import { toast, relName, scoreWord, updateHud, scorecardHtml, fade, bestText, showCard, hideCard, setPlaying, updateMulligan } from './ui.js';
 import { mapSvg } from './map.js';
 import { shoot, pickUp, physicsStep, ballPos, ballVel, placeBall } from './play.js';
 import { cancelDrag, updateGrabRing, handleKeys, refreshAim } from './input.js';
@@ -53,7 +53,7 @@ function choosePath() {
       return `<div class="path-choice locked" data-n="${n}"><b>${h.name}</b><span>Bonus island &middot; birdie to open</span></div>`;
     }
     return `<button class="path-choice ${l.kind === 'gold' ? 'gold' : ''}" data-n="${n}" data-go="${l.hole}">
-      <b>${h.name}</b><span>Par ${h.par} &middot; ${l.kind === 'gold' ? 'bonus island' : theme}</span></button>`;
+      <b>${h.name}</b><span>Par ${h.par} &middot; ${l.kind === 'gold' ? 'bonus: win a mulligan' : theme}</span></button>`;
   }).join('');
   showPaths();
 }
@@ -144,6 +144,7 @@ function resumeRound() {
   game.stage = r.stage;
   game.onBonus = r.onBonus;
   game.bonusPlayed = r.bonusPlayed;
+  game.mulligans = r.mulligans === 1 ? 1 : 0;
   hideCard();
   enterHole(r.hole);
 }
@@ -189,6 +190,7 @@ function startRound() {
   game.stage = 0;
   game.onBonus = false;
   game.bonusPlayed = false;
+  game.mulligans = 0;
   hideCard();
   enterHole(MAP.stages[0][0]);
 }
@@ -202,6 +204,7 @@ function startHole(i, { quiet = false, keepStrokes = false } = {}) {
   game.lastRest = [...hole.tee];
   game.sink = null;
   game.doneCard = '';
+  game.undo = null;
   game.aim = { angle: 0, power: 0, keyboard: false };
   if (!keepStrokes && !game.route.some(r => r.hole === i)) game.route.push({ hole: i, stage: game.stage, bonus: !!game.onBonus, score: null });
   game.links = nextChoices();
@@ -232,8 +235,17 @@ export function finishHole(score, note = '') {
   const r = game.route.find(q => q.hole === game.holeIndex);
   if (r) r.score = score;
   game.mode = 'done';
-  updateHud();
+  game.undo = null;
   const hole = holes[game.holeIndex];
+  // Par or better on the bonus island wins a mulligan.
+  let bonusNote = '';
+  if (game.onBonus) {
+    const won = score <= hole.par;
+    if (won) game.mulligans = 1;
+    bonusNote = `<p class="bonus-note">${won ? '<b>You won a mulligan!</b> Tap the golden ball after a bad putt to take it again.' : 'No mulligan this time.'}
+      ${score < hole.par ? ' And your birdie comes off your score.' : ' This hole doesn\'t count against your score.'}</p>`;
+  }
+  updateHud();
   const last = !game.onBonus && game.stage === STAGES - 1;
   const d = score - hole.par;
   if (d < 0 || score === 1) sfx.cheer(score === 1 ? 3 : -d);
@@ -241,7 +253,7 @@ export function finishHole(score, note = '') {
   game.links = nextChoices();
   if (game.links.some(l => l.kind === 'gold')) {
     world.unlockGold();
-    setTimeout(() => toast('The golden bridge is open!<small>Your birdie unlocked the bonus island.</small>', 3000), 600);
+    setTimeout(() => toast('The golden bridge is open!<small>Par or better on the bonus island wins a mulligan.</small>', 3200), 600);
   }
   // With only one island to go to, skip the map and head straight there.
   const open = game.links.filter(l => l.kind !== 'locked');
@@ -256,6 +268,7 @@ export function finishHole(score, note = '') {
     game.doneCard = `
       <h2>${note || scoreWord(score, hole.par)}</h2>
       <p class="sub">${game.onBonus ? 'Bonus island' : `Hole ${game.stage + 1}`} &middot; ${hole.name} &middot; ${score} stroke${score === 1 ? '' : 's'}</p>
+      ${bonusNote}
       ${scorecardHtml()}
       <div class="buttons">${nextButton}<button class="btn" data-act="menu">Menu</button></div>`;
     if (!game.paused) showCard(game.doneCard);
@@ -404,6 +417,7 @@ function frame(now) {
     world.render();
   }
   updateGrabRing();
+  updateMulligan();
   if (game.mode === 'choose') placePathLabels();
   requestAnimationFrame(frame);
 }
