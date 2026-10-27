@@ -270,12 +270,29 @@ body.aiming #hud-name { visibility: hidden; }
 .card .btn:active { transform: scale(0.97); }
 .card .how { text-align: left; margin: 14px 0 0; padding-left: 20px; font-size: 15px; line-height: 1.45; }
 
-.scorecard { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 14px; }
-.scorecard th, .scorecard td { padding: 4px 2px; border-bottom: 1px solid #e4ebf2; }
+/* Fixed columns and same-width digits, so the grid lines up whatever the
+   scores are. */
+.scorecard {
+  width: 100%;
+  margin-top: 12px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.scorecard col.label { width: 3em; }
+.scorecard col.total { width: 2.8em; }
+.scorecard th, .scorecard td { padding: 5px 0; border-bottom: 1px solid #e4ebf2; text-align: center; }
 .scorecard th { font-weight: 500; opacity: 0.8; }
+.scorecard th[scope="row"] { text-align: left; padding-left: 4px; }
+.scorecard tr.par td { opacity: 0.75; }
+.scorecard td.empty { opacity: 0.35; }
 .scorecard td.under { color: var(--good); font-weight: 700; }
 .scorecard td.over { color: var(--accent-ink); font-weight: 700; }
-.scorecard td.void { opacity: 0.45; text-decoration: line-through; font-weight: 500; }
+.scorecard td.void { opacity: 0.5; font-weight: 500; }
+.scorecard td:last-child, .scorecard th:last-child { border-left: 1px solid #e4ebf2; }
+.scorecard-note { margin: 6px 0 0; font-size: 12.5px; opacity: 0.75; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .scorecard td.current { background: #ffe9a8; box-shadow: inset 0 0 0 2px #e0b43c; }
 
 .noscript { position: fixed; inset: 0; display: grid; place-items: center; margin: 0; font-size: 18px; }

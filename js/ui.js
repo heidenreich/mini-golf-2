@@ -35,35 +35,47 @@ export function updateHud() {
   chip.classList.toggle('over', t.diff > 0);
 }
 
-// One column per stage, plus the bonus island if you went there.
+// One column per stage, plus the bonus island if you went there. Par is the
+// par of the island you played; a fork you haven't reached shows a dash if
+// its islands' pars differ.
 export function scorecardHtml() {
+  const playing = game.mode !== 'final';
   const played = stage => game.route.find(r => r.stage === stage && !r.bonus);
   const bonus = game.route.find(r => r.bonus);
+  const tone = (score, par) => (score < par ? 'under' : score > par ? 'over' : '');
   const cols = MAP.stages.map((opts, i) => {
     const r = played(i);
     const pars = [...new Set(opts.map(h => holes[h].par))];
-    const par = r ? holes[r.hole].par : pars.join('/');
-    const current = !game.onBonus && i === game.stage && game.mode !== 'final';
-    let cell = '&middot;', cls = '';
-    if (r && r.score != null) {
-      const d = r.score - holes[r.hole].par;
-      cell = r.score;
-      cls = d < 0 ? 'under' : d > 0 ? 'over' : '';
-    }
-    return { head: i + 1, par, cell, cls: `${cls} ${current ? 'current' : ''}` };
+    const par = r ? holes[r.hole].par : pars.length === 1 ? pars[0] : '&ndash;';
+    const parTitle = !r && pars.length > 1 ? ` title="Par ${pars.join(' or ')}, depending on the island you choose"` : '';
+    const scored = r && r.score != null;
+    return {
+      head: i + 1,
+      name: r ? holes[r.hole].name : opts.map(h => holes[h].name).join(' or '),
+      par, parTitle,
+      cell: scored ? r.score : '&middot;',
+      cls: `${scored ? tone(r.score, holes[r.hole].par) : 'empty'} ${playing && !game.onBonus && i === game.stage ? 'current' : ''}`,
+    };
   });
   if (bonus) {
-    // Shown faded when it doesn't count (par or worse on the bonus island).
-    const d = bonus.score == null ? 0 : bonus.score - holes[bonus.hole].par;
-    const off = bonus.score != null && !counts(bonus) ? 'void' : '';
-    cols.push({ head: '\u2605', par: holes[bonus.hole].par, cell: bonus.score ?? '&middot;', cls: `${d < 0 ? 'under' : off} ${game.onBonus && game.mode !== 'final' ? 'current' : ''}` });
+    const h = holes[bonus.hole];
+    const scored = bonus.score != null;
+    // A bonus score that doesn't count (anything but a hole-in-one) is shown
+    // greyed in brackets, and the note under the table says why.
+    cols.push({
+      head: '\u2605', name: `${h.name} (bonus)`, par: h.par, parTitle: '',
+      cell: !scored ? '&middot;' : counts(bonus) ? bonus.score : `(${bonus.score})`,
+      cls: `bonus ${!scored ? 'empty' : counts(bonus) ? 'under' : 'void'} ${playing && game.onBonus ? 'current' : ''}`,
+    });
   }
   const t = totals();
   return `<table class="scorecard">
-    <tr><th>Hole</th>${cols.map(c => `<th>${c.head}</th>`).join('')}<th>Tot</th></tr>
-    <tr><th>Par</th>${cols.map(c => `<td>${c.par}</td>`).join('')}<td>${t.par || '&middot;'}</td></tr>
-    <tr><th>You</th>${cols.map(c => `<td class="${c.cls}">${c.cell}</td>`).join('')}<td><b>${t.strokes || '&middot;'}</b></td></tr>
-  </table>`;
+    <caption class="sr-only">Scorecard</caption>
+    <colgroup><col class="label">${cols.map(() => '<col>').join('')}<col class="total"></colgroup>
+    <tr><th scope="row">Hole</th>${cols.map(c => `<th scope="col" title="${c.name}">${c.head}</th>`).join('')}<th scope="col">Total</th></tr>
+    <tr class="par"><th scope="row">Par</th>${cols.map(c => `<td${c.parTitle}>${c.par}</td>`).join('')}<td>${t.par || '&middot;'}</td></tr>
+    <tr class="you"><th scope="row">You</th>${cols.map(c => `<td class="${c.cls}">${c.cell}</td>`).join('')}<td class="${t.par ? tone(t.strokes, t.par) : 'empty'}"><b>${t.strokes || '&middot;'}</b></td></tr>
+  </table>${bonus ? '<p class="scorecard-note">&#9733; Bonus island: only a hole-in-one counts towards your total.</p>' : ''}`;
 }
 
 // The golden ball: shown while you hold a mulligan, and pressable once a
