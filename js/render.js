@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { insidePolygon, zoneContains, smooth } from './terrain.js';
-import { BALL_R, CUP_R, PIPE_R, WALL_HALF, spinnerAngle, moverState, windmillAngle, openBands, clipToBands, inBand, onBandEdge, skyBridges, skyBridgeMouths } from './physics.js';
+import { BALL_R, CUP_R, PIPE_R, WALL_HALF, spinnerAngle, moverState, windmillAngle, openBands, clipToBands, inBand, onBandEdge, skyBridges, skyBridgeMouths, fairwayBridges } from './physics.js';
 import { THEMES, CRYSTAL_COLORS, rng, lambert, makeTree, makeDrift, skyTexture } from './themes.js';
 
 // Draws a hole and everything on it. Nothing in here affects the game:
@@ -420,7 +420,7 @@ export class World {
     const cuts = [[cx, cz, CUP_R], ...(hole.pipes || []).map(p => [p.from[0], p.from[1], PIPE_R])];
     // Gaps, and rope bridges (drawn as planks instead of grass). A bridge
     // across the sky is off the fairway, so it cuts nothing.
-    const gaps = [...(hole.gaps || []), ...(hole.ropeBridges || []).filter(br => br.x1 == null)];
+    const gaps = [...(hole.gaps || []), ...fairwayBridges(hole)];
     const inCut = (x, z) => cuts.some(([ux, uz, r]) => Math.hypot(x - ux, z - uz) < r) || gaps.some(gp => z > gp.z1 && z < gp.z2);
     // Where the island is cut right through, and the nearer edge of that cut.
     const openAt = z => this.open.find(o => z > o.z1 && z < o.z2);
@@ -1451,13 +1451,17 @@ export class World {
       const n = Math.round(len / 0.2);
       const sky = br.x1 != null;
       const span = sky ? () => [br.x1, br.x2] : z => spanAt(hole.shape, z);
-      // How far past each end the ropes and posts reach.
-      const over = sky ? 0.02 : 0.15;
+      // How far past each end the ropes reach, and the posts: on a bridge
+      // across the sky, the posts stand just off the fairway, over the sky.
+      const over = sky ? 0.02 : 0.15, postOver = sky ? -0.1 : 0.15;
+      // Planks on the fairway run under the rails; across the sky they're
+      // exactly the deck the ball rolls on.
+      const extra = sky ? 0 : 0.12;
       for (let i = 0; i < n; i++) {
         const z = br.z1 + (i + 0.5) * (len / n);
         const [x0, x1] = span(z);
         const mid = (x0 + x1) / 2;
-        const plank = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 + 0.12, 0.05, (len / n) * 0.86), plankMat);
+        const plank = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 + extra, 0.05, (len / n) * 0.86), plankMat);
         plank.position.set(mid + (rand() - 0.5) * 0.03, terrain.height(mid, z) - 0.025, z);
         plank.rotation.set(-Math.atan(terrain.grad(mid, z)[1]), (rand() - 0.5) * 0.04, 0);
         plank.castShadow = true;
@@ -1485,7 +1489,7 @@ export class World {
           hanger.position.set(top.x, (top.y + low.y) / 2, top.z);
           g.add(hanger);
         }
-        for (const z of [br.z1 - over, br.z2 + over]) {
+        for (const z of [br.z1 - postOver, br.z2 + postOver]) {
           const x = edgeX(z), y = terrain.height(x, z);
           const post = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.8, 6), postMat);
           post.position.set(x, y + 0.25, z);

@@ -412,7 +412,7 @@ export const COURSE = {
       round: 0.5,
       tee: [0, 0],
       cup: [-0.5, 7.25],
-      route: [[9.3, 0], [9.3, 7.2], [-0.5, 7.25]],
+      route: [[9.3, 0], [9.3, 7.2]],
       ground: [
         { type: 'ramp', axis: 'x', from: 2.5, to: 6.5, rise: 0.5 },
         // The tightrope sags a little along its length (nothing on the arms).
