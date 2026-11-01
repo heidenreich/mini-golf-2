@@ -41,6 +41,10 @@ import { roundShape } from './terrain.js';
 //   windmills { x, z, w, d, door, period, phase }: a building with a tunnel
 //             through it; the sails block the doorway as they pass
 //   bumpers   pinball bumpers { x, z, r } that kick the ball away
+//   attractors  gravity crystals { x, z, core, reach, pull }: a solid crystal
+//             of radius core that pulls the ball towards it, pull m/s² at
+//             its surface, weaker with the square of the distance, and
+//             nothing beyond reach
 //   railKick  rails that bounce the ball back harder (m/s added on a hit)
 //   pipes     warp pipes { from: [x, z], to: [x, z], dir }: roll in at
 //             `from`, pop out at `to` heading along dir (radians, 0 = +z)
@@ -282,31 +286,16 @@ export const COURSE = {
       ],
     },
     {
-      name: 'Geode',
+      name: 'Gravity Well',
       theme: 'crystal',
       par: 3,
-      tip: 'The cup sits on a mound in the middle, with four crystal arms sweeping round it. Time it, and get the pace right: too soft rolls back, too hard runs over into the bumpers.',
-      // A round cavern. The cup is on a mound in the middle, guarded by four
-      // crystal arms (two crossed bars) sweeping round it, with crystal
-      // bumpers behind it to fling an overhit ball about.
-      shape: ellipse(0, 4.9, 4, 4.7, 16),
-      round: 1.2,
-      tee: [0, 1.0],
-      cup: [0, 5.2],
-      ground: [
-        { type: 'hill', x: 0, z: 5.2, r: 2.0, h: 0.25 },
-        // The floor dishes up towards the walls, so a ball that misses
-        // gathers round the foot of the mound rather than out by the rail.
-        { type: 'hill', x: 0, z: 5.2, r: 4.6, h: -0.3 },
-      ],
-      spinners: [
-        { x: 0, z: 5.2, inner: 0.5, len: 1.6, speed: 0.45, phase: 0 },
-        { x: 0, z: 5.2, inner: 0.5, len: 1.6, speed: 0.45, phase: Math.PI / 2 },
-      ],
-      bumpers: [
-        { x: 1.86, z: 7.42, r: 0.25 },
-        { x: 0.0, z: 8.1, r: 0.25 },
-        { x: -1.86, z: 7.42, r: 0.25 },
+      tip: 'The big crystal pulls the ball towards it. Aim past it and let it bend you round to the cup behind.',
+      shape: ellipse(0, 5, 3.6, 5.6, 16),
+      round: 1.0,
+      tee: [0, 0.6],
+      cup: [0, 9.0],
+      attractors: [
+        { x: 0, z: 5.0, core: 0.45, reach: 3.5, pull: 10 },
       ],
     },
     {
@@ -476,7 +465,7 @@ export const MAP = {
     ['Dogleg Bowl', 'Island Hopper'],
     ['Duck Pond', 'Cherry Terraces'],
     ['Windmill', 'Stepping Stones'],
-    ['Volcano', 'Geode'],
+    ['Volcano', 'Gravity Well'],
     ['Switchback', 'Moon Hop'],
     ['Frozen Island', 'Rope Bridge'],
     ['Warp Finale', 'Tightrope'],

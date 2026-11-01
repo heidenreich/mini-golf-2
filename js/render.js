@@ -1387,6 +1387,45 @@ export class World {
       g.add(grp);
       return { s, grp };
     });
+    // Gravity crystals: a glowing cluster, with rings on the ground that
+    // ripple in towards it to show how far its pull reaches.
+    this.attractors = (hole.attractors || []).map((c, ci) => {
+      const grp = new THREE.Group();
+      const y = terrain.height(c.x, c.z);
+      grp.position.set(c.x, y, c.z);
+      const rand = rng(77 + ci);
+      const glow = CRYSTAL_COLORS[ci % CRYSTAL_COLORS.length];
+      const mat = new THREE.MeshStandardMaterial({ color: glow, emissive: glow, emissiveIntensity: 0.6, roughness: 0.15, flatShading: true });
+      // One tall crystal in the middle, a ring of shorter ones leaning out.
+      const spike = (h, r, x, z, tilt, turn) => {
+        const m = new THREE.Mesh(new THREE.OctahedronGeometry(1, 0), mat);
+        m.scale.set(r, h / 2, r);
+        m.position.set(x, h / 2 - 0.05, z);
+        m.rotation.set(Math.cos(turn) * tilt, rand() * Math.PI, Math.sin(turn) * tilt);
+        m.castShadow = true;
+        grp.add(m);
+      };
+      spike(1.5, c.core * 0.75, 0, 0, 0, 0);
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2 + rand() * 0.4;
+        spike(0.6 + rand() * 0.4, c.core * 0.4, Math.cos(a) * c.core * 0.55, Math.sin(a) * c.core * 0.55, 0.45, a);
+      }
+      const light = new THREE.PointLight(glow, 1.2, c.reach * 1.6, 2);
+      light.position.y = 0.9;
+      grp.add(light);
+      g.add(grp);
+      // The rings follow the ground, a little above it.
+      const rings = [];
+      for (let k = 0; k < 3; k++) {
+        const ringMat = new THREE.MeshBasicMaterial({ color: glow, transparent: true, opacity: 0, depthWrite: false });
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.96, 1, 64), ringMat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.set(c.x, y + 0.03, c.z);
+        g.add(ring);
+        rings.push({ ring, mat: ringMat, phase: k / 3 });
+      }
+      return { c, rings, mat };
+    });
     this.movers = (hole.movers || []).map(m => {
       const block = new THREE.Mesh(
         new THREE.BoxGeometry(m.w, 0.3, m.d),
@@ -2019,6 +2058,17 @@ export class World {
     }
 
     for (const { s, grp } of this.spinners) grp.rotation.y = -spinnerAngle(s, t);
+    for (const { c, rings, mat } of this.attractors || []) {
+      mat.emissiveIntensity = 0.55 + 0.2 * Math.sin(this.time * 2);
+      for (const r of rings) {
+        // Each ring shrinks from the edge of the pull in to the crystal,
+        // brightening as it goes, then starts again.
+        const f = (this.time * 0.35 + r.phase) % 1;
+        const rad = c.core + (c.reach - c.core) * (1 - f);
+        r.ring.scale.setScalar(rad);
+        r.mat.opacity = 0.35 * Math.sin(Math.PI * f);
+      }
+    }
     for (const { w, sails } of this.windmills) sails.rotation.z = windmillAngle(w, t);
     for (const b of this.bumpers) {
       b.flash = Math.max(0, b.flash - dt * 4);
