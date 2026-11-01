@@ -52,6 +52,23 @@ export function spinnerAngle(s, t) {
   return (s.phase || 0) + s.speed * t;
 }
 
+// The pull (m/s², [x, z]) of a gravity crystal on a ball at (x, z): as strong
+// as `pull` at the crystal's surface (radius `core`), falling off with the
+// square of the distance, and fading to nothing by `reach`.
+export function attractorPull(c, x, z) {
+  const dx = c.x - x, dz = c.z - z;
+  const d = Math.hypot(dx, dz);
+  if (d >= c.reach || d < 1e-6) return [0, 0];
+  const r = Math.max(d, c.core);
+  const fade = 1 - smoothstep((d - c.reach * 0.7) / (c.reach * 0.3));
+  const a = c.pull * (c.core / r) ** 2 * fade;
+  return [(dx / d) * a, (dz / d) * a];
+}
+
+function smoothstep(t) {
+  return t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+}
+
 export function moverState(m, t) {
   const w = (Math.PI * 2) / m.period;
   const a = w * t + (m.phase || 0);
@@ -285,8 +302,14 @@ export class Sim {
     const surf = grav === 1 ? base : { k: base.k, decel: base.decel * grav };
     const [gx, gz] = this.terrain.grad(b.x, b.z);
     const norm = 1 + gx * gx + gz * gz;
-    const ax = (-GRAVITY * grav * ROLLING * gx) / norm;
-    const az = (-GRAVITY * grav * ROLLING * gz) / norm;
+    let ax = (-GRAVITY * grav * ROLLING * gx) / norm;
+    let az = (-GRAVITY * grav * ROLLING * gz) / norm;
+    // Gravity crystals pull the ball towards them.
+    for (const c of this.hole.attractors || []) {
+      const [px, pz] = attractorPull(c, b.x, b.z);
+      ax += px;
+      az += pz;
+    }
     const slopePull = Math.hypot(ax, az);
 
     let sp = Math.hypot(b.vx, b.vz);
@@ -404,6 +427,12 @@ export class Sim {
       const seg = this.pipeSeg || (this.pipeSeg = {});
       Object.assign(seg, { x1: p.to[0], z1: p.to[1], x2: p.to[0], z2: p.to[1] });
       this.hitSegment(seg, PIPE_R, 0, 0, null, onHit);
+    }
+    // A gravity crystal is solid: the ball bounces off it like a post.
+    for (const c of this.hole.attractors || []) {
+      const seg = this.crystalSeg || (this.crystalSeg = {});
+      Object.assign(seg, { x1: c.x, z1: c.z, x2: c.x, z2: c.z });
+      this.hitSegment(seg, c.core, 0, 0, null, onHit, { what: 'crystal' });
     }
     (this.hole.bumpers || []).forEach((bp, i) => {
       const seg = this.bumperSeg || (this.bumperSeg = {});
