@@ -172,7 +172,7 @@ export const COURSE = {
     {
       name: 'Switchback',
       theme: 'beach',
-      par: 4,
+      par: 3,
       tip: 'Downhill round two corners. The first is banked and carries you round; the second leans the wrong way, out towards the bunker.',
       shape: [[-1.5, -1], [1.5, -1], [1.5, 5], [8, 5], [8, 14], [5, 14], [5, 8.2], [-1.5, 8.2]],
       round: 0.5,
