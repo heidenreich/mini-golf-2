@@ -32,7 +32,7 @@ Each hole sits on its own themed floating island: a wobbly outline with bays and
 | 8 | Frozen Island | 3 | Winter | The whole fairway is frozen; ponds either side of an ice bridge |
 | 8 | *or* Rope Bridge | 3 | Cherry blossom | Putt along a sagging plank bridge with no rails; roll off the side and it falls (+1 stroke) |
 | 9 | Warp Finale | 3 | Night | Sliding blocks, or a warp pipe up the ramp |
-| 9 | *or* Drawbridge | 3 | Volcanic island | A rope bridge with a block sliding back and forth across it; time it or get knocked off |
+| 9 | *or* Tightrope | 4 | Volcanic island | A long U: uphill to a flat top, round, and downhill to the cup. Or take the shortcut along a plank barely wider than the ball straight across the sky; fall off and it costs a stroke |
 | ★ | Cloud Island (bonus) | 2 | Cloud | Puffy cloud cushions bounce the ball back. Reached by a golden bridge after a hole-in-one on any island before the last. Par or better wins a **mulligan**: later in the round, tap the golden ball (or press M) after a putt to take it again, with that putt and any penalty it cost not counting. The score here only counts if it's a hole-in-one, so the bonus island never costs you |
 
 **The golden bridge.** Every island but the last has a golden bridge with a padlock on it. Make a hole-in-one and it opens to Cloud Island, a bonus hole played before you carry on, where par or better wins a mulligan. You can visit it once a round.

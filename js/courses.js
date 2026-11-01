@@ -24,7 +24,10 @@ import { roundShape } from './terrain.js';
 //             split: true opens the island right through, with sky below;
 //             minSpeed overrides how fast the ball must be going to clear it
 //   ropeBridges  { z1, z2 }: between z1 and z2 the fairway is a plank bridge
-//             with no rails; roll off the side and it falls (+1 stroke)
+//             with no rails; roll off the side and it falls (+1 stroke).
+//             Add x1, x2 for a bridge across open sky instead, off the
+//             fairway: a deck from x1 to x2 joining the rail at z1 to the
+//             rail at z2, with the rails opened up where it meets them
 //   windmills { x, z, w, d, door, period, phase }: a building with a tunnel
 //             through it; the sails block the doorway as they pass
 //   bumpers   pinball bumpers { x, z, r } that kick the ball away
@@ -398,22 +401,25 @@ export const COURSE = {
       ],
     },
     {
-      name: 'Drawbridge',
+      name: 'Tightrope',
       theme: 'volcano',
-      par: 3,
-      tip: 'A block slides back and forth across the bridge. Time it, or it knocks you over the side.',
-      shape: [[-1.7, -1], [1.7, -1], [1.9, 1.5], [1.5, 3], [0.8, 3.2], [0.8, 9.6], [1.5, 9.8], [1.9, 12], [1.6, 14.2], [-1.6, 14.2], [-1.9, 12], [-1.5, 9.8], [-0.8, 9.6], [-0.8, 3.2], [-1.5, 3], [-1.9, 1.5]],
-      round: 0.4,
+      par: 4,
+      tip: 'The long way climbs round the U and back down. Or walk the tightrope straight across: fall off and it costs a stroke.',
+      // A U: up the near arm to a flat top, round, and back down the far
+      // arm to the cup. A plank barely wider than the ball crosses the sky
+      // between the arms, straight from the tee towards the cup.
+      shape: [[-1.2, -0.8], [10.2, -0.8], [10.2, 8.0], [-1.2, 8.0], [-1.2, 6.4], [8.4, 6.4], [8.4, 0.8], [-1.2, 0.8]],
+      round: 0.5,
       tee: [0, 0],
-      cup: [0.3, 12.4],
+      cup: [-0.5, 7.25],
+      route: [[9.3, 0], [9.3, 7.2], [-0.5, 7.25]],
       ground: [
-        { type: 'hill', x: 0, z: 6.4, rx: 2.5, rz: 3.2, h: -0.18 },
+        { type: 'ramp', axis: 'x', from: 2.5, to: 6.5, rise: 0.5 },
+        // The tightrope sags a little along its length (nothing on the arms).
+        { type: 'hill', x: 0, z: 3.6, rx: 3, rz: 2.8, h: -0.12 },
       ],
       ropeBridges: [
-        { z1: 3.6, z2: 9.2 },
-      ],
-      movers: [
-        { x1: -0.5, z1: 6.4, x2: 0.5, z2: 6.4, w: 0.4, d: 0.3, period: 3.6, phase: 0 },
+        { x1: -0.17, x2: 0.17, z1: 0.8, z2: 6.4 },
       ],
     },
   ],
@@ -437,7 +443,7 @@ export const MAP = {
     ['Volcano', 'Crystal Sweepers'],
     ['Switchback', 'Moon Hop'],
     ['Frozen Island', 'Rope Bridge'],
-    ['Warp Finale', 'Drawbridge'],
+    ['Warp Finale', 'Tightrope'],
   ].map(stage => stage.map(name => COURSE.holes.findIndex(h => h.name === name))),
   bonus: { hole: COURSE.holes.findIndex(h => h.name === 'Cloud Island'), from: [0, 1, 2, 3, 4, 5, 6, 7] },
 };

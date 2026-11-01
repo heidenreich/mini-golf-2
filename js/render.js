@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { insidePolygon, zoneContains, smooth } from './terrain.js';
-import { BALL_R, CUP_R, PIPE_R, WALL_HALF, spinnerAngle, moverState, windmillAngle, openBands, clipToBands } from './physics.js';
+import { BALL_R, CUP_R, PIPE_R, WALL_HALF, spinnerAngle, moverState, windmillAngle, openBands, clipToBands, inBand, onBandEdge, skyBridges, skyBridgeMouths } from './physics.js';
 import { THEMES, CRYSTAL_COLORS, rng, lambert, makeTree, makeDrift, skyTexture } from './themes.js';
 
 // Draws a hole and everything on it. Nothing in here affects the game:
@@ -10,6 +10,7 @@ const GRID = 0.1;            // ground mesh resolution (m)
 const ISLAND_MIN = 1.2;      // the island reaches this far past the rails at least...
 const ISLAND_VARY = 1.2;     // ...and up to this much further, varying round the edge
 const ROUGH_DROP = 0.05;     // rough sits a touch below the fairway
+const SKY_CHANNEL = 0.7;     // open sky either side of a bridge across the sky
 const RAIL_TOP = 0.13;
 const RAIL_BOTTOM = -0.22;
 
@@ -72,7 +73,8 @@ function noise2(seed) {
 // The island under a hole: everything within a wobbly distance of the
 // fairway, so its edge has bays and headlands instead of straight sides.
 // `open`: bands of z ({ z1, z2 }) where the island is cut right through,
-// with sky below (rope bridges and split gaps).
+// with sky below (rope bridges and split gaps), or rectangles (with x1, x2
+// too) cut out of it, round a bridge across the sky.
 function makeIsland(shape, b, seed, open = []) {
   const bump = noise2(seed);
   const reach = (x, z) => ISLAND_MIN + ISLAND_VARY * bump(x * 0.33, z * 0.33);
@@ -91,7 +93,7 @@ function makeIsland(shape, b, seed, open = []) {
     x0: b.x0 - pad, x1: b.x1 + pad, z0: b.z0 - pad, z1: b.z1 + pad,
     inside(x, z, inset = 0) {
       const pad = Math.max(0, inset);
-      if (open.some(o => z > o.z1 - pad && z < o.z2 + pad)) return false;
+      if (open.some(o => inBand(o, x, z, pad))) return false;
       if (insidePolygon(shape, x, z)) return true;
       return fairwayDist(x, z) + inset <= reach(x, z);
     },
@@ -317,7 +319,10 @@ export class World {
     const g = this.holeGroup = new THREE.Group();
     const b = this.bounds = bounds(hole.shape);
     this.open = openBands(hole);
-    const island = this.island = makeIsland(hole.shape, b, 11 + index * 7, this.open);
+    // A bridge across the sky has a channel of sky either side of it, cut
+    // through the rough between the two bits of fairway it joins.
+    const channels = skyBridges(hole).map(br => ({ x1: br.x1 - SKY_CHANNEL, x2: br.x2 + SKY_CHANNEL, z1: br.z1, z2: br.z2 }));
+    const island = this.island = makeIsland(hole.shape, b, 11 + index * 7, [...this.open, ...channels]);
 
     this.buildGround(g, hole, terrain, island);
     this.buildUnderside(g, terrain, island);
@@ -413,8 +418,9 @@ export class World {
     const zoneColor = { sand: COLORS.sand, ice: COLORS.ice, water: COLORS.pondBed, moss: COLORS.moss, snow: COLORS.snow };
     // Holes cut in the fairway: the cup and warp pipe mouths, and gaps.
     const cuts = [[cx, cz, CUP_R], ...(hole.pipes || []).map(p => [p.from[0], p.from[1], PIPE_R])];
-    // Gaps, and rope bridges (drawn as planks instead of grass).
-    const gaps = [...(hole.gaps || []), ...(hole.ropeBridges || [])];
+    // Gaps, and rope bridges (drawn as planks instead of grass). A bridge
+    // across the sky is off the fairway, so it cuts nothing.
+    const gaps = [...(hole.gaps || []), ...(hole.ropeBridges || []).filter(br => br.x1 == null)];
     const inCut = (x, z) => cuts.some(([ux, uz, r]) => Math.hypot(x - ux, z - uz) < r) || gaps.some(gp => z > gp.z1 && z < gp.z2);
     // Where the island is cut right through, and the nearer edge of that cut.
     const openAt = z => this.open.find(o => z > o.z1 && z < o.z2);
@@ -1173,11 +1179,12 @@ export class World {
     // No rails where there's open sky beside the fairway, just a post at
     // each end of the open stretch.
     const ends = [];
+    const bands = [...this.open, ...skyBridgeMouths(hole)];
     for (let i = 0; i < pts.length; i++) {
-      for (const s of clipToBands([...pts[i], ...pts[(i + 1) % pts.length]], this.open)) {
+      for (const s of clipToBands([...pts[i], ...pts[(i + 1) % pts.length]], bands)) {
         segs.push(s);
         for (const [x, z] of [[s[0], s[1]], [s[2], s[3]]]) {
-          if (this.open.some(o => Math.abs(z - o.z1) < 1e-6 || Math.abs(z - o.z2) < 1e-6)) ends.push([x, z]);
+          if (bands.some(o => onBandEdge(o, x, z))) ends.push([x, z]);
         }
       }
     }
@@ -1228,10 +1235,9 @@ export class World {
     // Around the outline: a post every ~1.5 m of rail and at sharp corners.
     let run = 0;
     posts.push(...ends);
-    const open = z => this.open.some(o => z > o.z1 && z < o.z2);
     for (let i = 0; i < pts.length; i++) {
       const [ax, az] = pts[(i + pts.length - 1) % pts.length], [px, pz] = pts[i], [bx, bz] = pts[(i + 1) % pts.length];
-      if (open(pz)) continue;
+      if (bands.some(o => inBand(o, px, pz))) continue;
       const turn = Math.abs(Math.atan2((px - ax) * (bz - pz) - (pz - az) * (bx - px), (px - ax) * (bx - px) + (pz - az) * (bz - pz)));
       if (turn > 0.6 || run > 1.5 || i === 0) {
         posts.push([px, pz]);
@@ -1428,7 +1434,8 @@ export class World {
 
   // A plank bridge you putt along: the deck follows the ground (so it sags
   // as the hole says), on two ropes, with rope handrails too high to stop a
-  // ball rolling off the side.
+  // ball rolling off the side. One across the sky (with x1, x2) keeps the
+  // same width all the way and starts and ends at the rails.
   buildRopeBridges(g, hole, terrain) {
     const rand = rng(23);
     const plankMat = lambert('#9b7048', { flatShading: true });
@@ -1442,7 +1449,10 @@ export class World {
     for (const br of hole.ropeBridges || []) {
       const len = br.z2 - br.z1;
       const n = Math.round(len / 0.2);
-      const span = z => spanAt(hole.shape, z);
+      const sky = br.x1 != null;
+      const span = sky ? () => [br.x1, br.x2] : z => spanAt(hole.shape, z);
+      // How far past each end the ropes and posts reach.
+      const over = sky ? 0.02 : 0.15;
       for (let i = 0; i < n; i++) {
         const z = br.z1 + (i + 0.5) * (len / n);
         const [x0, x1] = span(z);
@@ -1462,7 +1472,7 @@ export class World {
         // Under the plank ends, and a handrail that sags a little more.
         const under = [], rail = [];
         for (let i = 0; i <= 24; i++) {
-          const t = i / 24, z = br.z1 - 0.15 + (len + 0.3) * t;
+          const t = i / 24, z = br.z1 - over + (len + 2 * over) * t;
           const x = edgeX(z), y = terrain.height(x, z);
           under.push(new THREE.Vector3(x, y - 0.06, z));
           rail.push(new THREE.Vector3(x, y + 0.55 - 0.12 * 4 * t * (1 - t), z));
@@ -1475,7 +1485,7 @@ export class World {
           hanger.position.set(top.x, (top.y + low.y) / 2, top.z);
           g.add(hanger);
         }
-        for (const z of [br.z1 - 0.15, br.z2 + 0.15]) {
+        for (const z of [br.z1 - over, br.z2 + over]) {
           const x = edgeX(z), y = terrain.height(x, z);
           const post = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.8, 6), postMat);
           post.position.set(x, y + 0.25, z);
