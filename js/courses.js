@@ -287,27 +287,26 @@ export const COURSE = {
       par: 3,
       tip: 'The cup sits on a mound in the middle, with four crystal arms sweeping round it. Time it, and get the pace right: too soft rolls back, too hard runs over into the bumpers.',
       // A round cavern. The cup is on a mound in the middle, guarded by four
-      // crystal arms (two crossed bars) sweeping round it, with a ring of
-      // crystal bumpers round the far side to fling an overhit ball about.
-      shape: ellipse(0, 5, 4, 4.2, 16),
+      // crystal arms (two crossed bars) sweeping round it, with crystal
+      // bumpers behind it to fling an overhit ball about.
+      shape: ellipse(0, 4.9, 4, 4.7, 16),
       round: 1.2,
-      tee: [0, 1.6],
+      tee: [0, 1.0],
       cup: [0, 5.2],
       ground: [
-        { type: 'hill', x: 0, z: 5.2, r: 2.0, h: 0.35 },
+        { type: 'hill', x: 0, z: 5.2, r: 2.0, h: 0.25 },
+        // The floor dishes up towards the walls, so a ball that misses
+        // gathers round the foot of the mound rather than out by the rail.
+        { type: 'hill', x: 0, z: 5.2, r: 4.6, h: -0.3 },
       ],
       spinners: [
-        { x: 0, z: 5.2, inner: 0.5, len: 1.6, speed: 0.7, phase: 0 },
-        { x: 0, z: 5.2, inner: 0.5, len: 1.6, speed: 0.7, phase: Math.PI / 2 },
+        { x: 0, z: 5.2, inner: 0.5, len: 1.6, speed: 0.45, phase: 0 },
+        { x: 0, z: 5.2, inner: 0.5, len: 1.6, speed: 0.45, phase: Math.PI / 2 },
       ],
       bumpers: [
-        { x: 2.51, z: 3.75, r: 0.25 },
-        { x: 2.86, z: 5.7, r: 0.25 },
         { x: 1.86, z: 7.42, r: 0.25 },
         { x: 0.0, z: 8.1, r: 0.25 },
         { x: -1.86, z: 7.42, r: 0.25 },
-        { x: -2.86, z: 5.7, r: 0.25 },
-        { x: -2.51, z: 3.75, r: 0.25 },
       ],
     },
     {
