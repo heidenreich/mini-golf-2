@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { insidePolygon, zoneContains, smooth } from './terrain.js';
-import { BALL_R, CUP_R, PIPE_R, WALL_HALF, spinnerAngle, moverState, windmillAngle, openBands, clipToBands, inBand, onBandEdge, skyBridges, skyBridgeMouths, fairwayBridges } from './physics.js';
+import { BALL_R, CUP_R, PIPE_R, WALL_HALF, spinnerAngle, moverState, windmillAngle, openBands, clipToBands, inBand, onBandEdge, skyBridges, skyBridgeMouths, fairwayBridges, deckCentre, deckSpan } from './physics.js';
 import { THEMES, CRYSTAL_COLORS, rng, lambert, makeTree, makeDrift, skyTexture } from './themes.js';
 
 // Draws a hole and everything on it. Nothing in here affects the game:
@@ -321,7 +321,10 @@ export class World {
     this.open = openBands(hole);
     // A bridge across the sky has a channel of sky either side of it, cut
     // through the rough between the two bits of fairway it joins.
-    const channels = skyBridges(hole).map(br => ({ x1: br.x1 - SKY_CHANNEL, x2: br.x2 + SKY_CHANNEL, z1: br.z1, z2: br.z2 }));
+    const channels = skyBridges(hole).map(br => {
+      const [x1, x2] = deckSpan(br);
+      return { x1: x1 - SKY_CHANNEL, x2: x2 + SKY_CHANNEL, z1: br.z1, z2: br.z2 };
+    });
     const island = this.island = makeIsland(hole.shape, b, 11 + index * 7, [...this.open, ...channels]);
 
     this.buildGround(g, hole, terrain, island);
@@ -1450,7 +1453,8 @@ export class World {
       const len = br.z2 - br.z1;
       const n = Math.round(len / 0.2);
       const sky = br.x1 != null;
-      const span = sky ? () => [br.x1, br.x2] : z => spanAt(hole.shape, z);
+      const half = (br.x2 - br.x1) / 2;
+      const span = sky ? z => [deckCentre(br, z) - half, deckCentre(br, z) + half] : z => spanAt(hole.shape, z);
       // How far past each end the ropes reach, and the posts: on a bridge
       // across the sky, the posts stand just off the fairway, over the sky.
       const over = sky ? 0.02 : 0.15, postOver = sky ? -0.1 : 0.15;
@@ -1462,8 +1466,18 @@ export class World {
         const [x0, x1] = span(z);
         const mid = (x0 + x1) / 2;
         const plank = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 + extra, 0.05, (len / n) * 0.86), plankMat);
-        plank.position.set(mid + (rand() - 0.5) * 0.03, terrain.height(mid, z) - 0.025, z);
-        plank.rotation.set(-Math.atan(terrain.grad(mid, z)[1]), (rand() - 0.5) * 0.04, 0);
+        const [gx, gz] = terrain.grad(mid, z);
+        const jx = (rand() - 0.5) * 0.03, jy = (rand() - 0.5) * 0.04;
+        if (sky) {
+          // Exactly on the deck the ball rolls on: turned along its curve
+          // and leaning with its bank.
+          const turn = Math.atan((deckCentre(br, z + 0.01) - deckCentre(br, z - 0.01)) / 0.02);
+          plank.position.set(mid, terrain.height(mid, z) - 0.025, z);
+          plank.rotation.set(-Math.atan(gz), turn, Math.atan(gx), 'YXZ');
+        } else {
+          plank.position.set(mid + jx, terrain.height(mid, z) - 0.025, z);
+          plank.rotation.set(-Math.atan(gz), jy, 0);
+        }
         plank.castShadow = true;
         plank.receiveShadow = true;
         g.add(plank);
