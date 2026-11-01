@@ -95,23 +95,58 @@ function windmillWalls(w) {
 
 // Stretches with open sky beside the fairway and no rails: rope bridges,
 // and gaps that split the island in two. Roll off the side there and the
-// ball falls.
+// ball falls. These run right across the hole, between z1 and z2.
 export function openBands(hole) {
-  return [...(hole.ropeBridges || []), ...(hole.gaps || []).filter(g => g.split)];
+  return [...(hole.ropeBridges || []).filter(br => br.x1 == null), ...(hole.gaps || []).filter(g => g.split)];
+}
+
+// Rope bridges with x1, x2 aren't part of the fairway: they cross open sky
+// from one part of it to another, from the rail at z1 to the rail at z2.
+export function skyBridges(hole) {
+  return (hole.ropeBridges || []).filter(br => br.x1 != null);
+}
+
+// Where the rails open onto a sky bridge: its deck, stretched past the rails
+// at each end so the rail across its mouth is cut away, and a ball wider
+// each side, so a ball a little off line rolls out and falls rather than
+// bouncing back off the rail ends.
+export function skyBridgeMouths(hole) {
+  const m = BALL_R * 1.2;
+  return skyBridges(hole).map(br => ({ x1: br.x1 - m, x2: br.x2 + m, z1: br.z1 - 0.2, z2: br.z2 + 0.2 }));
+}
+
+// Inside a band (or within `pad` of it). A band with no x1, x2 runs right across.
+export function inBand(o, x, z, pad = 0) {
+  return z > o.z1 - pad && z < o.z2 + pad && (o.x1 == null || (x > o.x1 - pad && x < o.x2 + pad));
+}
+
+// On the edge of a band, where a clipped rail ends.
+export function onBandEdge(o, x, z) {
+  const e = 1e-6;
+  const inX = o.x1 == null || (x >= o.x1 - e && x <= o.x2 + e);
+  const inZ = z >= o.z1 - e && z <= o.z2 + e;
+  return (inX && (Math.abs(z - o.z1) < e || Math.abs(z - o.z2) < e))
+    || (o.x1 != null && inZ && (Math.abs(x - o.x1) < e || Math.abs(x - o.x2) < e));
 }
 
 // The parts of a segment outside every band: [[x1, z1, x2, z2], ...].
 export function clipToBands(seg, bands) {
   let pieces = [seg];
-  for (const { z1: b1, z2: b2 } of bands) {
+  for (const o of bands) {
     pieces = pieces.flatMap(([x1, z1, x2, z2]) => {
-      const at = z => (z2 === z1 ? 0 : (z - z1) / (z2 - z1));
+      // The stretch of the segment (0..1) inside the band's rectangle.
+      let t0 = 0, t1 = 1;
+      const slab = (p, d, lo, hi) => {
+        if (Math.abs(d) < 1e-12) return p > lo && p < hi;
+        let a = (lo - p) / d, b = (hi - p) / d;
+        if (a > b) [a, b] = [b, a];
+        t0 = Math.max(t0, a);
+        t1 = Math.min(t1, b);
+        return t0 < t1;
+      };
+      const hit = slab(z1, z2 - z1, o.z1, o.z2) && (o.x1 == null || slab(x1, x2 - x1, o.x1, o.x2));
+      if (!hit || t1 - t0 < 1e-9) return [[x1, z1, x2, z2]];
       const pt = t => [x1 + (x2 - x1) * t, z1 + (z2 - z1) * t];
-      const lo = Math.min(z1, z2), hi = Math.max(z1, z2);
-      if (hi <= b1 || lo >= b2) return [[x1, z1, x2, z2]];
-      if (lo >= b1 && hi <= b2) return [];
-      const ta = Math.max(0, Math.min(1, at(b1))), tb = Math.max(0, Math.min(1, at(b2)));
-      const [t0, t1] = ta < tb ? [ta, tb] : [tb, ta];
       const out = [];
       if (t0 > 1e-6) out.push([x1, z1, ...pt(t0)]);
       if (t1 < 1 - 1e-6) out.push([...pt(t1), x2, z2]);
@@ -124,7 +159,7 @@ export function clipToBands(seg, bands) {
 function wallSegments(hole) {
   const segs = [];
   const pts = hole.shape;
-  const bands = openBands(hole);
+  const bands = [...openBands(hole), ...skyBridgeMouths(hole)];
   for (let i = 0; i < pts.length; i++) {
     const [x1, z1] = pts[i], [x2, z2] = pts[(i + 1) % pts.length];
     for (const [a, b, c, d] of clipToBands([x1, z1, x2, z2], bands)) segs.push({ x1: a, z1: b, x2: c, z2: d });
@@ -145,6 +180,7 @@ export class Sim {
     this.walls = wallSegments(hole);
     this.water = (hole.zones || []).filter(z => z.type === 'water');
     this.open = openBands(hole);
+    this.decks = skyBridges(hole);
     this.ball = { x: hole.tee[0], z: hole.tee[1], vx: 0, vz: 0 };
     this.t = 0;
     this.restTime = 0;
@@ -260,8 +296,10 @@ export class Sim {
       if (zoneContains(w, b.x, b.z, 0.92)) return { type: 'water' };
     }
     if (!insidePolygon(this.hole.shape, b.x, b.z)) {
+      // On a bridge across the sky, it rolls on.
+      if (this.decks.some(d => inBand(d, b.x, b.z))) return null;
       // No rail here: over the side it goes.
-      if (this.open.some(o => b.z > o.z1 && b.z < o.z2)) return { type: 'fall', off: true };
+      if ([...this.open, ...this.decks].some(o => b.z > o.z1 && b.z < o.z2)) return { type: 'fall', off: true };
       return { type: 'lost' };
     }
     return null;
