@@ -17,6 +17,8 @@ import { roundShape } from './terrain.js';
 //               bank   { x, z1, z2, w, tilt }       tilted across (rising tilt per m
 //                                                   towards +x), most halfway from z1
 //                                                   to z2, within w of x
+//               horseshoe { xs, cx, cz, R, w, drop } downhill all the way round a U
+//                                                   (see horseshoe() for the shape)
 //               corner { x, z, dir, r0, r1, rise }  a banked turn round the inside
 //                                                   corner (x, z), rising towards the
 //                                                   outside one (dir [±1, ±1]) from
@@ -63,6 +65,20 @@ function cloud(cx, cz, rx, rz) {
     const r = 1 + 0.12 * Math.cos(a * 6);
     return [cx + Math.cos(a) * rx * r, cz + Math.sin(a) * rz * r];
   });
+}
+
+// A U on its side: two arms along x (centred on z = cz - R and cz + R,
+// half-width w) from x = xs, joined by a semicircular bend centred on
+// (cx, cz), with n points round each arc.
+function horseshoe(xs, cx, cz, R, w, n) {
+  const arc = (r, from, to) => Array.from({ length: n + 1 }, (_, i) => {
+    const a = from + ((to - from) * i) / n;
+    return [cx + Math.cos(a) * r, cz + Math.sin(a) * r];
+  });
+  return [
+    [xs, cz - R - w], ...arc(R + w, -Math.PI / 2, Math.PI / 2), [xs, cz + R + w],
+    [xs, cz + R - w], ...arc(R - w, Math.PI / 2, -Math.PI / 2), [xs, cz - R + w],
+  ];
 }
 
 // An oval outline with n corners (rounded off afterwards like any other).
@@ -304,20 +320,19 @@ export const COURSE = {
       theme: 'cloud',
       bonus: true,
       par: 2,
-      tip: 'Bonus island! Par or better wins a mulligan, and a hole-in-one comes off your score. Ride the rainbow to the cup, or play safe the long way round the cloud.',
-      // A cloud in a U, with open sky between its arms. A rainbow arches
-      // across from the tee to the cup, curving out to the left and banked
-      // to bring the ball back round. The long way round is calm (bouncy
-      // cushions and a bumper turned it into pinball): a safe 3.
-      shape: [[-1.2, -0.8], [8.3, -0.8], [8.3, 7.2], [-1.2, 7.2], [-1.2, 5.6], [6.5, 5.6], [6.5, 0.8], [-1.2, 0.8]],
-      round: 0.7,
+      tip: 'Bonus island! Par or better wins a mulligan, and a hole-in-one comes off your score. Slide down the rainbow to the cup, or play safe the long way round the cloud.',
+      // A cloud in a horseshoe, downhill all the way round, with open sky
+      // between its arms. A rainbow slides down across the gap from the tee
+      // to the cup, curving out to the left and banked to bring the ball
+      // back round. The long way round is a safe 3.
+      shape: horseshoe(-1.2, 4.3, 3.2, 3.2, 0.8, 12),
+      round: 0.5,
       tee: [0, 0],
       cup: [-0.2, 6.5],
-      route: [[7.4, 0], [7.4, 6.4]],
+      route: [[4.3, 0], [7.5, 3.2], [4.3, 6.4]],
       ground: [
-        // The rainbow arches up in the middle, and leans into its curve
-        // (neither reaches the cloud).
-        { type: 'hill', x: 0.3, z: 3.2, rx: 3, rz: 2.4, h: 0.25 },
+        { type: 'horseshoe', xs: -1.2, cx: 4.3, cz: 3.2, R: 3.2, w: 0.8, drop: 0.6 },
+        // The rainbow leans into its curve (not reaching the cloud).
         { type: 'bank', x: 0, z1: 0.8, z2: 5.6, w: 1.4, tilt: 0.2 },
       ],
       ropeBridges: [
