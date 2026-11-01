@@ -37,7 +37,8 @@ import { roundShape } from './terrain.js';
 //             Add x1, x2 for a bridge across open sky instead, off the
 //             fairway: a deck from x1 to x2 joining the rail at z1 to the
 //             rail at z2, with the rails opened up where it meets them;
-//             bow (m) curves it sideways, its middle swung towards +x
+//             bow (m) curves it sideways, its middle swung towards +x;
+//             rainbow: true draws it as a rainbow instead of planks
 //   windmills { x, z, w, d, door, period, phase }: a building with a tunnel
 //             through it; the sails block the doorway as they pass
 //   bumpers   pinball bumpers { x, z, r } that kick the ball away
@@ -303,14 +304,27 @@ export const COURSE = {
       theme: 'cloud',
       bonus: true,
       par: 2,
-      tip: 'Bonus island! Par or better wins a mulligan, and a hole-in-one comes off your score. Bank it round the puff.',
-      shape: cloud(0, 5, 2.8, 5.2),
-      round: 0.5,
-      tee: [0, 0.6],
-      cup: [0.3, 9.3],
+      tip: 'Bonus island! Par or better wins a mulligan, and a hole-in-one comes off your score. Ride the rainbow to the cup, or bounce the long way round the cloud.',
+      // A cloud in a U, with open sky between its arms. A rainbow arches
+      // across from the tee to the cup, curving out to the left and banked
+      // to bring the ball back round; the long way round has bouncy cushions.
+      shape: [[-1.2, -0.8], [8.3, -0.8], [8.3, 7.2], [-1.2, 7.2], [-1.2, 5.6], [6.5, 5.6], [6.5, 0.8], [-1.2, 0.8]],
+      round: 0.7,
+      tee: [0, 0],
+      cup: [-0.2, 6.5],
+      route: [[7.4, 0], [7.4, 6.4]],
       railKick: 1.0,
+      ground: [
+        // The rainbow arches up in the middle, and leans into its curve
+        // (neither reaches the cloud).
+        { type: 'hill', x: 0.3, z: 3.2, rx: 3, rz: 2.4, h: 0.25 },
+        { type: 'bank', x: 0, z1: 0.8, z2: 5.6, w: 1.4, tilt: 0.2 },
+      ],
+      ropeBridges: [
+        { x1: -0.3, x2: 0.3, z1: 0.8, z2: 5.6, bow: 0.4, rainbow: true },
+      ],
       bumpers: [
-        { x: 0, z: 5.2, r: 0.45 },
+        { x: 7.4, z: 3.2, r: 0.45 },
       ],
     },
     // Added after the bonus island so earlier holes keep their numbers
