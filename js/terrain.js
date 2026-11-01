@@ -24,6 +24,14 @@ function featureHeight(f, x, z) {
       const dx = (x - f.x) / (f.rx || f.r), dz = (z - f.z) / (f.rz || f.r);
       return bump(Math.sqrt(dx * dx + dz * dz), f.h);
     }
+    case 'bank': {
+      // Tilted across, rising `tilt` per metre towards +x, most in the middle
+      // and not at all at z1 and z2; within w of x, then fading out.
+      if (z <= f.z1 || z >= f.z2) return 0;
+      const d = x - f.x;
+      const fade = 1 - smooth((Math.abs(d) - f.w) / 0.6);
+      return f.tilt * d * Math.sin((Math.PI * (z - f.z1)) / (f.z2 - f.z1)) * fade;
+    }
     case 'ridge': {
       const c = f.axis === 'x' ? x : z;
       return bump(Math.abs(c - f.at) / (f.w / 2), f.h);

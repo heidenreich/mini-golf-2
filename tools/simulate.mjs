@@ -68,7 +68,8 @@ function estimate(hole, x, z) {
   const d = distanceToGo(hole, x, z);
   let est = d < 0.5 ? 1 : d < 2 ? 1.3 : 1.6 + d / 8;
   for (const g of hole.gaps || []) if (z < g.z1) est += 0.6;
-  for (const b of hole.ropeBridges || []) if (z < b.z2) est += 0.4;
+  // Bridges right across the hole; a bridge across the sky is optional.
+  for (const b of hole.ropeBridges || []) if (b.x1 == null && z < b.z2) est += 0.4;
   return est;
 }
 
@@ -88,9 +89,18 @@ function chooseShot(hole, sim, skill) {
   const toCup = Math.atan2(hole.cup[0] - from[0], hole.cup[1] - from[1]);
   const deg = Math.PI / 180;
   const tryShot = (a, p) => ({ a, p, c: cost(hole, from, roll(sim, a, p)) });
+  // Round the line to the cup, and round the line to each corner of the
+  // route that's well off it (the long way round, when there's a shortcut).
+  const aims = [toCup];
+  for (const [px, pz] of hole.route || []) {
+    const a = Math.atan2(px - from[0], pz - from[1]);
+    if (aims.every(b => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))) > 36 * deg)) aims.push(a);
+  }
   const coarse = [];
-  for (let da = -36; da <= 36; da += 4) {
-    for (let p = 0.05; p <= 1.001; p += 0.05) coarse.push(tryShot(toCup + da * deg, p));
+  for (const aim of aims) {
+    for (let da = -36; da <= 36; da += 4) {
+      for (let p = 0.05; p <= 1.001; p += 0.05) coarse.push(tryShot(aim + da * deg, p));
+    }
   }
   coarse.sort((x, y) => x.c - y.c);
   // A finer look round the very best, for shots that need precision.
