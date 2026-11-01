@@ -412,9 +412,17 @@ export class Sim {
     });
     for (const sp of this.hole.spinners || []) {
       const a = spinnerAngle(sp, t);
-      const ux = Math.cos(a) * sp.len, uz = Math.sin(a) * sp.len;
-      const seg = { x1: sp.x - ux, z1: sp.z - uz, x2: sp.x + ux, z2: sp.z + uz };
-      this.hitSegment(seg, SPINNER_HALF, 0, 0, sp, onHit);
+      const c = Math.cos(a), s = Math.sin(a), r0 = sp.inner || 0;
+      if (!r0) {
+        const seg = { x1: sp.x - c * sp.len, z1: sp.z - s * sp.len, x2: sp.x + c * sp.len, z2: sp.z + s * sp.len };
+        this.hitSegment(seg, SPINNER_HALF, 0, 0, sp, onHit);
+        continue;
+      }
+      // Two arms, with a clear circle of radius `inner` round the pivot.
+      for (const k of [-1, 1]) {
+        const seg = { x1: sp.x + k * c * r0, z1: sp.z + k * s * r0, x2: sp.x + k * c * sp.len, z2: sp.z + k * s * sp.len };
+        this.hitSegment(seg, SPINNER_HALF, 0, 0, sp, onHit);
+      }
     }
     for (const m of this.hole.movers || []) {
       const st = moverState(m, t);

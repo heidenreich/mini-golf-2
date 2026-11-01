@@ -1368,13 +1368,21 @@ export class World {
             ? new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.5, roughness: 0.2, flatShading: true })
             : lambert(color),
         );
-        if (crystal) piece.scale.set(s.len / segN + 0.02, 0.09, 0.09);
-        piece.position.x = -s.len + (s.len * 2 * (i + 0.5)) / segN;
+        // Evenly along the bar, or along its two arms when there's a clear
+        // circle of radius `inner` round the pivot.
+        const r0 = s.inner || 0, armN = segN / 2, piece_len = r0 ? (s.len - r0) / armN : (s.len * 2) / segN;
+        if (crystal) piece.scale.set(piece_len / 2 + 0.02, 0.09, 0.09);
+        else piece.scale.set(piece_len / ((s.len * 2) / segN), 1, 1);
+        piece.position.x = r0
+          ? (i < armN ? -1 : 1) * (r0 + piece_len * ((i % armN) + 0.5))
+          : -s.len + piece_len * (i + 0.5);
         piece.castShadow = true;
         bar.add(piece);
       }
       bar.position.y = 0.09;
-      grp.add(hub, bar);
+      grp.add(bar);
+      // With a clear circle round the pivot (inner), there's no hub.
+      if (!s.inner) grp.add(hub);
       grp.position.set(s.x, terrain.height(s.x, s.z), s.z);
       g.add(grp);
       return { s, grp };
