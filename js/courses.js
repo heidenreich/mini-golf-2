@@ -407,7 +407,7 @@ export const COURSE = {
     {
       name: 'Tightrope',
       theme: 'volcano',
-      par: 4,
+      par: 3,
       tip: 'The long way climbs steeply round the U and back down. Or try the tightrope: it curves and leans, so aim out and let it bring you round. Fall off and it costs a stroke.',
       // A U: up a steep near arm to a flat top, round, and steeply back down
       // the far arm to the cup. A plank barely wider than the ball crosses
