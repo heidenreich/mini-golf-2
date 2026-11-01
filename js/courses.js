@@ -304,16 +304,16 @@ export const COURSE = {
       theme: 'cloud',
       bonus: true,
       par: 2,
-      tip: 'Bonus island! Par or better wins a mulligan, and a hole-in-one comes off your score. Ride the rainbow to the cup, or bounce the long way round the cloud.',
+      tip: 'Bonus island! Par or better wins a mulligan, and a hole-in-one comes off your score. Ride the rainbow to the cup, or play safe the long way round the cloud.',
       // A cloud in a U, with open sky between its arms. A rainbow arches
       // across from the tee to the cup, curving out to the left and banked
-      // to bring the ball back round; the long way round has bouncy cushions.
+      // to bring the ball back round. The long way round is calm (bouncy
+      // cushions and a bumper turned it into pinball): a safe 3.
       shape: [[-1.2, -0.8], [8.3, -0.8], [8.3, 7.2], [-1.2, 7.2], [-1.2, 5.6], [6.5, 5.6], [6.5, 0.8], [-1.2, 0.8]],
       round: 0.7,
       tee: [0, 0],
       cup: [-0.2, 6.5],
       route: [[7.4, 0], [7.4, 6.4]],
-      railKick: 1.0,
       ground: [
         // The rainbow arches up in the middle, and leans into its curve
         // (neither reaches the cloud).
@@ -322,9 +322,6 @@ export const COURSE = {
       ],
       ropeBridges: [
         { x1: -0.3, x2: 0.3, z1: 0.8, z2: 5.6, bow: 0.4, rainbow: true },
-      ],
-      bumpers: [
-        { x: 7.4, z: 3.2, r: 0.45 },
       ],
     },
     // Added after the bonus island so earlier holes keep their numbers
