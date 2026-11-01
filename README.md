@@ -26,8 +26,8 @@ Each hole sits on its own themed floating island: a wobbly outline with bays and
 | 5 | Windmill | 3 | Tulip fields | Through the door between the turning sails, or round either side |
 | 5 | *or* Stepping Stones | 4 | Lily pond | Hop across zigzagging mossy stones with sky between, every hop on an angle |
 | 6 | Volcano | 3 | Volcanic island | The cup sits in a crater on a hill |
-| 6 | *or* Crystal Sweepers | 3 | Crystal caves | Two spinning crystal bars to time your putt past |
-| 7 | Switchback | 4 | Tropical beach | Downhill round two corners: the first banked to carry you round, the second leaning the wrong way, out towards a bunker. Then over a ridge |
+| 6 | *or* Geode | 3 | Crystal caves | A round cavern with the cup on a mound in the middle, four crystal arms sweeping round it and a ring of bumpers to fling an overhit ball about |
+| 7 | Switchback | 3 | Tropical beach | Downhill round two corners: the first banked to carry you round, the second leaning the wrong way, out towards a bunker. Then over a ridge |
 | 7 | *or* Moon Hop | 3 | The Moon | Low gravity: the ball rolls on and on, across craters to a cup up a crater's side. The fairway leans over, so a long putt curls slowly round |
 | 8 | Frozen Island | 3 | Winter | The whole fairway is frozen; ponds either side of an ice bridge |
 | 8 | *or* Rope Bridge | 3 | Cherry blossom | Putt along a sagging plank bridge with no rails; roll off the side and it falls (+1 stroke) |

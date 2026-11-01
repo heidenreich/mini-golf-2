@@ -24,7 +24,9 @@ import { roundShape } from './terrain.js';
 //   zones     sand / water / ice / moss / snow: ellipses { x, z, w, d } centred on x, z,
 //             or add rect: true for a rectangle
 //   walls     extra wall segments [x1, z1, x2, z2]
-//   spinners  rotating bars { x, z, len (half-length), speed (rad/s), phase }
+//   spinners  rotating bars { x, z, len (half-length), speed (rad/s), phase };
+//             inner leaves a clear circle of that radius round the pivot,
+//             so the bar is two arms (and can sweep round a cup)
 //   movers    blocks { x1, z1, x2, z2, w, d, period, phase } gliding between two points
 //   gaps      chasms right across the hole { z1, z2 }: reach the edge fast
 //             enough and the ball flies over, too slow and it drops in (+1 stroke).
@@ -172,7 +174,7 @@ export const COURSE = {
     {
       name: 'Switchback',
       theme: 'beach',
-      par: 4,
+      par: 3,
       tip: 'Downhill round two corners. The first is banked and carries you round; the second leans the wrong way, out towards the bunker.',
       shape: [[-1.5, -1], [1.5, -1], [1.5, 5], [8, 5], [8, 14], [5, 14], [5, 8.2], [-1.5, 8.2]],
       round: 0.5,
@@ -280,17 +282,31 @@ export const COURSE = {
       ],
     },
     {
-      name: 'Crystal Sweepers',
+      name: 'Geode',
       theme: 'crystal',
       par: 3,
-      tip: 'Two crystal bars sweep the fairway. Time your putt past each one.',
-      shape: [[-1.6, -1], [1.6, -1], [1.8, 6.5], [1.6, 13], [-1.6, 13], [-1.8, 6.5]],
-      round: 1.0,
-      tee: [0, 0],
-      cup: [0, 11.4],
+      tip: 'The cup sits on a mound in the middle, with four crystal arms sweeping round it. Time it, and get the pace right: too soft rolls back, too hard runs over into the bumpers.',
+      // A round cavern. The cup is on a mound in the middle, guarded by four
+      // crystal arms (two crossed bars) sweeping round it, with crystal
+      // bumpers behind it to fling an overhit ball about.
+      shape: ellipse(0, 4.9, 4, 4.7, 16),
+      round: 1.2,
+      tee: [0, 1.0],
+      cup: [0, 5.2],
+      ground: [
+        { type: 'hill', x: 0, z: 5.2, r: 2.0, h: 0.25 },
+        // The floor dishes up towards the walls, so a ball that misses
+        // gathers round the foot of the mound rather than out by the rail.
+        { type: 'hill', x: 0, z: 5.2, r: 4.6, h: -0.3 },
+      ],
       spinners: [
-        { x: 0, z: 4.6, len: 1.25, speed: 1.0, phase: 0 },
-        { x: 0, z: 8.4, len: 1.25, speed: -1.3, phase: 0.8 },
+        { x: 0, z: 5.2, inner: 0.5, len: 1.6, speed: 0.45, phase: 0 },
+        { x: 0, z: 5.2, inner: 0.5, len: 1.6, speed: 0.45, phase: Math.PI / 2 },
+      ],
+      bumpers: [
+        { x: 1.86, z: 7.42, r: 0.25 },
+        { x: 0.0, z: 8.1, r: 0.25 },
+        { x: -1.86, z: 7.42, r: 0.25 },
       ],
     },
     {
@@ -460,7 +476,7 @@ export const MAP = {
     ['Dogleg Bowl', 'Island Hopper'],
     ['Duck Pond', 'Cherry Terraces'],
     ['Windmill', 'Stepping Stones'],
-    ['Volcano', 'Crystal Sweepers'],
+    ['Volcano', 'Geode'],
     ['Switchback', 'Moon Hop'],
     ['Frozen Island', 'Rope Bridge'],
     ['Warp Finale', 'Tightrope'],
