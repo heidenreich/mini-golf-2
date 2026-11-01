@@ -32,6 +32,16 @@ function featureHeight(f, x, z) {
       const fade = 1 - smooth((Math.abs(d) - f.w) / 0.6);
       return f.tilt * d * Math.sin((Math.PI * (z - f.z1)) / (f.z2 - f.z1)) * fade;
     }
+    case 'corner': {
+      // A banked turn: rising away from the inside corner (x, z) towards
+      // the outside one (the way dir [sx, sz] points), from r0 out to r1,
+      // and most across the middle of the turn, so it fades to nothing
+      // where it meets the straights either side.
+      const dx = (x - f.x) * f.dir[0], dz = (z - f.z) * f.dir[1];
+      if (dx <= 0 || dz <= 0) return 0;
+      const r = Math.hypot(dx, dz);
+      return f.rise * smooth((r - f.r0) / (f.r1 - f.r0)) * Math.sin(2 * Math.atan2(dz, dx));
+    }
     case 'ridge': {
       const c = f.axis === 'x' ? x : z;
       return bump(Math.abs(c - f.at) / (f.w / 2), f.h);

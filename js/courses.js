@@ -17,6 +17,10 @@ import { roundShape } from './terrain.js';
 //               bank   { x, z1, z2, w, tilt }       tilted across (rising tilt per m
 //                                                   towards +x), most halfway from z1
 //                                                   to z2, within w of x
+//               corner { x, z, dir, r0, r1, rise }  a banked turn round the inside
+//                                                   corner (x, z), rising towards the
+//                                                   outside one (dir [±1, ±1]) from
+//                                                   r0 to r1 out
 //   zones     sand / water / ice / moss / snow: ellipses { x, z, w, d } centred on x, z,
 //             or add rect: true for a rectangle
 //   walls     extra wall segments [x1, z1, x2, z2]
