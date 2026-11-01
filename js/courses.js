@@ -396,7 +396,7 @@ export const COURSE = {
       theme: 'moon',
       gravity: 0.35,
       par: 3,
-      tip: 'Low gravity: the ball rolls and rolls, and barely feels the slopes. The cup is up the side of a crater.',
+      tip: 'Low gravity: the ball rolls and rolls. The ground leans to the right, so start it out left and let it curl back to the cup, up the side of a crater.',
       shape: ellipse(0, 6.5, 3.2, 7.6, 14),
       round: 1.2,
       tee: [0, 0],
@@ -411,6 +411,10 @@ export const COURSE = {
         { type: 'hill', x: 1.3, z: 7.6, r: 0.65, h: -0.22 },
         { type: 'hill', x: -0.3, z: 11.4, r: 2.0, h: 0.22 },
         { type: 'hill', x: -0.3, z: 11.4, r: 1.3, h: -0.32 },
+        // The middle of the fairway leans over (most halfway, flat at the
+        // tee and the cup), so in low gravity a long putt curls slowly
+        // back: start it out to the left and let it come round.
+        { type: 'bank', x: 0, z1: 0.5, z2: 11, w: 3.4, tilt: 0.35 },
       ],
     },
     {
