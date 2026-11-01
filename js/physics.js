@@ -111,6 +111,24 @@ export function skyBridges(hole) {
   return (hole.ropeBridges || []).filter(br => br.x1 != null);
 }
 
+// The middle of a sky bridge's deck at z. It leaves and meets the rails
+// between x1 and x2, and can curve sideways between: `bow` is how far (m)
+// its middle swings towards +x.
+export function deckCentre(br, z) {
+  const t = Math.max(0, Math.min(1, (z - br.z1) / (br.z2 - br.z1)));
+  return (br.x1 + br.x2) / 2 + (br.bow || 0) * Math.sin(Math.PI * t);
+}
+
+export function onDeck(br, x, z) {
+  return z > br.z1 && z < br.z2 && Math.abs(x - deckCentre(br, z)) < (br.x2 - br.x1) / 2;
+}
+
+// The x range a sky bridge's deck covers, curve and all.
+export function deckSpan(br) {
+  const b = br.bow || 0;
+  return [br.x1 + Math.min(0, b), br.x2 + Math.max(0, b)];
+}
+
 // Where the rails open onto a sky bridge: its deck, stretched past the rails
 // at each end so the rail across its mouth is cut away. The rail ends stand
 // clear of the deck by a ball's width more than a ball touching them needs
@@ -125,7 +143,10 @@ export function skyBridgeMouths(hole) {
 // Off the fairway beside a sky bridge, where a ball that leaves the deck
 // falls; anywhere else off the fairway it's out of bounds.
 function skyBridgeDrops(hole) {
-  return skyBridges(hole).map(br => ({ x1: br.x1 - MOUTH - 0.3, x2: br.x2 + MOUTH + 0.3, z1: br.z1, z2: br.z2 }));
+  return skyBridges(hole).map(br => {
+    const [x1, x2] = deckSpan(br);
+    return { x1: x1 - MOUTH - 0.3, x2: x2 + MOUTH + 0.3, z1: br.z1, z2: br.z2 };
+  });
 }
 
 // Inside a band (or within `pad` of it). A band with no x1, x2 runs right across.
@@ -311,7 +332,7 @@ export class Sim {
     }
     if (!insidePolygon(this.hole.shape, b.x, b.z)) {
       // On a bridge across the sky, it rolls on.
-      if (this.decks.some(d => inBand(d, b.x, b.z))) return null;
+      if (this.decks.some(d => onDeck(d, b.x, b.z))) return null;
       // No rail here: over the side it goes.
       if (this.drops.some(o => inBand(o, b.x, b.z))) return { type: 'fall', off: true };
       return { type: 'lost' };

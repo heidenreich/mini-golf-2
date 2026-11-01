@@ -14,6 +14,9 @@ import { roundShape } from './terrain.js';
 //               ramp   { axis, from, to, rise }     a smooth step from one level to another
 //               hill   { x, z, r | rx, rz, h }      a round bump (negative h makes a bowl)
 //               ridge  { axis, at, w, h }           a bump running all the way across
+//               bank   { x, z1, z2, w, tilt }       tilted across (rising tilt per m
+//                                                   towards +x), most halfway from z1
+//                                                   to z2, within w of x
 //   zones     sand / water / ice / moss / snow: ellipses { x, z, w, d } centred on x, z,
 //             or add rect: true for a rectangle
 //   walls     extra wall segments [x1, z1, x2, z2]
@@ -27,7 +30,8 @@ import { roundShape } from './terrain.js';
 //             with no rails; roll off the side and it falls (+1 stroke).
 //             Add x1, x2 for a bridge across open sky instead, off the
 //             fairway: a deck from x1 to x2 joining the rail at z1 to the
-//             rail at z2, with the rails opened up where it meets them
+//             rail at z2, with the rails opened up where it meets them;
+//             bow (m) curves it sideways, its middle swung towards +x
 //   windmills { x, z, w, d, door, period, phase }: a building with a tunnel
 //             through it; the sails block the doorway as they pass
 //   bumpers   pinball bumpers { x, z, r } that kick the ball away
@@ -404,22 +408,25 @@ export const COURSE = {
       name: 'Tightrope',
       theme: 'volcano',
       par: 4,
-      tip: 'The long way climbs round the U and back down. Or walk the tightrope straight across: fall off and it costs a stroke.',
-      // A U: up the near arm to a flat top, round, and back down the far
-      // arm to the cup. A plank barely wider than the ball crosses the sky
-      // between the arms, straight from the tee towards the cup.
+      tip: 'The long way climbs steeply round the U and back down. Or try the tightrope: it curves and leans, so aim out and let it bring you round. Fall off and it costs a stroke.',
+      // A U: up a steep near arm to a flat top, round, and steeply back down
+      // the far arm to the cup. A plank barely wider than the ball crosses
+      // the sky between the arms from the tee towards the cup, curving out
+      // to the left and banked to bring the ball back round.
       shape: [[-1.2, -0.8], [10.2, -0.8], [10.2, 8.0], [-1.2, 8.0], [-1.2, 6.4], [8.4, 6.4], [8.4, 0.8], [-1.2, 0.8]],
       round: 0.5,
       tee: [0, 0],
       cup: [-0.5, 7.25],
       route: [[9.3, 0], [9.3, 7.2]],
       ground: [
-        { type: 'ramp', axis: 'x', from: 2.5, to: 6.5, rise: 0.5 },
-        // The tightrope sags a little along its length (nothing on the arms).
+        { type: 'ramp', axis: 'x', from: 2.5, to: 6.5, rise: 1.0 },
+        // The tightrope sags a little along its length, and leans into its
+        // curve (neither reaches the arms).
         { type: 'hill', x: 0, z: 3.6, rx: 3, rz: 2.8, h: -0.12 },
+        { type: 'bank', x: 0, z1: 0.8, z2: 6.4, w: 1.2, tilt: 0.3 },
       ],
       ropeBridges: [
-        { x1: -0.17, x2: 0.17, z1: 0.8, z2: 6.4 },
+        { x1: -0.17, x2: 0.17, z1: 0.8, z2: 6.4, bow: 0.5 },
       ],
     },
   ],
