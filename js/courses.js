@@ -17,6 +17,10 @@ import { roundShape } from './terrain.js';
 //               bank   { x, z1, z2, w, tilt }       tilted across (rising tilt per m
 //                                                   towards +x), most halfway from z1
 //                                                   to z2, within w of x
+//               corner { x, z, dir, r0, r1, rise }  a banked turn round the inside
+//                                                   corner (x, z), rising towards the
+//                                                   outside one (dir [±1, ±1]) from
+//                                                   r0 to r1 out
 //   zones     sand / water / ice / moss / snow: ellipses { x, z, w, d } centred on x, z,
 //             or add rect: true for a rectangle
 //   walls     extra wall segments [x1, z1, x2, z2]
@@ -169,7 +173,7 @@ export const COURSE = {
       name: 'Switchback',
       theme: 'beach',
       par: 4,
-      tip: 'Downhill, round two corners, then a little rise to the cup.',
+      tip: 'Downhill round two corners. The first is banked and carries you round; the second leans the wrong way, out towards the bunker.',
       shape: [[-1.5, -1], [1.5, -1], [1.5, 5], [8, 5], [8, 14], [5, 14], [5, 8.2], [-1.5, 8.2]],
       round: 0.5,
       tee: [0, 0],
@@ -180,9 +184,14 @@ export const COURSE = {
         { type: 'ramp', axis: 'z', from: 1, to: 4, rise: -0.5 },
         { type: 'ramp', axis: 'x', from: 2, to: 4.5, rise: -0.4 },
         { type: 'ridge', axis: 'z', at: 10.3, w: 1.6, h: 0.18 },
+        // The first corner is banked: a well-paced putt rides round, a
+        // soft one drops to the inside. The second is off-camber, falling
+        // away towards the bunker in its outside corner.
+        { type: 'corner', x: 1.5, z: 5, dir: [-1, 1], r0: 0.5, r1: 3.2, rise: 0.5 },
+        { type: 'corner', x: 5, z: 8.2, dir: [1, -1], r0: 0.5, r1: 3.2, rise: -0.5 },
       ],
       zones: [
-        { type: 'sand', x: 6.6, z: 6.6, w: 1.6, d: 1.2 },
+        { type: 'sand', x: 7.2, z: 5.8, w: 1.6, d: 1.4 },
       ],
     },
     {
