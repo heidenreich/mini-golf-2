@@ -113,17 +113,26 @@ export const COURSE = {
     {
       name: 'The Gap',
       theme: 'desert',
-      par: 2,
-      tip: 'Up the kicker and over the gap. Too soft and it drops in.',
-      shape: [[-1.5, -1], [1.5, -1], [1.5, 8], [2.0, 10.5], [1.6, 13], [-1.6, 13], [-2.0, 10.5], [-1.5, 8]],
+      par: 3,
+      tip: 'Up the kicker and over the gap, then up a second kicker and over the chasm to the green. Too soft and it drops in.',
+      // Two jumps: a kicker and a gap, a stretch of canyon floor, then a
+      // second, higher kicker over another chasm to a green with a bunker
+      // behind it. The second chasm is a little narrower and easier to
+      // clear from a standing start.
+      shape: [[-1.5, -1], [1.5, -1], [1.5, 8], [2.0, 10.5], [1.6, 12.6], [1.9, 15], [1.5, 17.6], [-1.5, 17.6], [-1.9, 15], [-1.6, 12.6], [-2.0, 10.5], [-1.5, 8]],
       round: 0.8,
       tee: [0, 0],
-      cup: [0.4, 10.8],
+      cup: [-0.4, 15.4],
       ground: [
         { type: 'ramp', axis: 'z', from: 2.5, to: 4.6, rise: 0.35 },
+        { type: 'ramp', axis: 'z', from: 10.0, to: 11.8, rise: 0.3 },
+      ],
+      zones: [
+        { type: 'sand', x: -0.2, z: 16.8, w: 2.6, d: 0.9 },
       ],
       gaps: [
         { z1: 5.6, z2: 7.0 },
+        { z1: 12.6, z2: 13.6, minSpeed: 2.3 },
       ],
     },
     {
@@ -497,9 +506,9 @@ export const MAP = {
   stages: [
     ['Welcome Hill'],
     ['The Gap', 'Mushroom Grove'],
-    ['Dogleg Bowl', 'Drifting Clouds'],
+    ['Dogleg Bowl', 'Windmill'],
     ['Duck Pond', 'Cherry Terraces'],
-    ['Windmill', 'Stepping Stones'],
+    ['Drifting Clouds', 'Stepping Stones'],
     ['Volcano', 'Gravity Well'],
     ['Switchback', 'Moon Hop'],
     ['Frozen Island', 'Rope Bridge'],
