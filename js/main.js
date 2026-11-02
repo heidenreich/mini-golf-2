@@ -164,9 +164,10 @@ function enterHole(hole, resume = null) {
     game.strokes = resume.strokes;
     const b = resume.ball;
     if (b && insidePolygon(holes[hole].shape, b[0], b[1])) {
-      game.sim.place(b[0], b[1]);
-      game.lastRest = [b[0], b[1]];
-      world.cam.target.set(b[0], game.terrain.height(b[0], b[1]), b[1]);
+      game.sim.place(...b);
+      game.lastRest = game.sim.spot();
+      const { x, z } = game.sim.ball;
+      world.cam.target.set(x, game.terrain.height(x, z), z);
     }
     updateHud();
     saveRound();

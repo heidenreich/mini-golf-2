@@ -62,7 +62,11 @@ export function savedRound() {
     r.mulligans = r.mulligans === 1 ? 1 : 0;
     // Older saves have no strokes or ball: start that hole from the tee.
     r.strokes = Number.isInteger(r.strokes) && r.strokes >= 0 && r.strokes < MAX_STROKES ? r.strokes : 0;
-    r.ball = Array.isArray(r.ball) && r.ball.length === 2 && r.ball.every(Number.isFinite) ? r.ball : null;
+    // [x, z], or [x, z, { plat, dx, dz }] for a ball on a drifting platform.
+    const plats = holes[r.hole].platforms || [];
+    const onPlat = q => q && Number.isInteger(q.plat) && q.plat >= 0 && q.plat < plats.length && Number.isFinite(q.dx) && Number.isFinite(q.dz);
+    const okBall = b => Array.isArray(b) && Number.isFinite(b[0]) && Number.isFinite(b[1]) && (b.length === 2 || (b.length === 3 && onPlat(b[2])));
+    r.ball = okBall(r.ball) ? r.ball : null;
     return r;
   } catch {
     return null;
