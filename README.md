@@ -28,7 +28,7 @@ Each hole sits on its own themed floating island: a wobbly outline with bays and
 | 6 | Volcano | 3 | Volcanic island | The cup sits in a crater on a hill |
 | 6 | *or* Gravity Well | 3 | Crystal caves | A giant gravity crystal stands between the tee and the cup and pulls the ball towards it. Aim past it at the right pace and it slingshots you round to the cup |
 | 7 | Switchback | 3 | Tropical beach | Downhill round two corners: the first banked to carry you round, the second leaning the wrong way, out towards a bunker. Then over a ridge |
-| 7 | *or* Moon Hop | 3 | The Moon | Low gravity: the ball rolls on and on, across craters to a cup up a crater's side. The fairway leans over, so a long putt curls slowly round |
+| 7 | *or* Moon Hop | 3 | The Moon | Low gravity: the ball rolls on and on, across craters to a cup up a crater's side. The fairway leans over, so a long putt curls slowly round. A little moon hovers on the low side over an icy halo: drift too close and the ball can go into orbit round it |
 | 8 | Frozen Island | 3 | Winter | The whole fairway is frozen; ponds either side of an ice bridge |
 | 8 | *or* Rope Bridge | 3 | Cherry blossom | Putt along a sagging plank bridge with no rails; roll off the side and it falls (+1 stroke) |
 | 9 | Warp Finale | 3 | Night | Sliding blocks, or a warp pipe up the ramp |

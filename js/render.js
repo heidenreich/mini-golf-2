@@ -1394,6 +1394,7 @@ export class World {
       const y = terrain.height(c.x, c.z);
       grp.position.set(c.x, y, c.z);
       const rand = rng(77 + ci);
+      if (c.style === 'moon') return this.buildMoonRock(g, c, y, rand);
       const glow = CRYSTAL_COLORS[ci % CRYSTAL_COLORS.length];
       const mat = new THREE.MeshStandardMaterial({ color: glow, emissive: glow, emissiveIntensity: 0.6, roughness: 0.15, flatShading: true });
       // One tall crystal in the middle, a ring of shorter ones leaning out.
@@ -1440,6 +1441,45 @@ export class World {
       g.add(block);
       return { m, block };
     });
+  }
+
+  // A little moon for a gravity crystal with style: 'moon': a lumpy grey
+  // rock with craters, hovering just off the ground and slowly turning,
+  // with pale rings rippling in to show its pull.
+  buildMoonRock(g, c, y, rand) {
+    const geo = new THREE.IcosahedronGeometry(1, 2);
+    const pos = geo.attributes.position;
+    const v = new THREE.Vector3();
+    // Lumps, and a few craters pressed in.
+    const craters = Array.from({ length: 5 }, () => new THREE.Vector3(rand() - 0.5, rand() - 0.5, rand() - 0.5).normalize());
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).normalize();
+      let r = 1 + (rand() - 0.5) * 0.08;
+      for (const cr of craters) {
+        const d = v.distanceTo(cr);
+        if (d < 0.45) r -= 0.12 * Math.cos((d / 0.45) * (Math.PI / 2));
+      }
+      v.multiplyScalar(r);
+      pos.setXYZ(i, v.x, v.y, v.z);
+    }
+    geo.computeVertexNormals();
+    const rock = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: '#b9bcc4', roughness: 0.95, flatShading: true, emissive: '#9aa6c8', emissiveIntensity: 0.12 }));
+    const size = c.core * 1.15;
+    rock.scale.setScalar(size);
+    const hover = y + size + 0.12;
+    rock.position.set(c.x, hover, c.z);
+    rock.castShadow = true;
+    g.add(rock);
+    const rings = [];
+    for (let k = 0; k < 3; k++) {
+      const ringMat = new THREE.MeshBasicMaterial({ color: '#cfe0ff', transparent: true, opacity: 0, depthWrite: false });
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.96, 1, 64), ringMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(c.x, y + 0.03, c.z);
+      g.add(ring);
+      rings.push({ ring, mat: ringMat, phase: k / 3 });
+    }
+    return { c, rings, mat: rock.material, rock, hover };
   }
 
   // A chasm right across the fairway, with a hazard stripe on each lip.
@@ -2103,8 +2143,14 @@ export class World {
     }
 
     for (const { s, grp } of this.spinners) grp.rotation.y = -spinnerAngle(s, t);
-    for (const { c, rings, mat } of this.attractors || []) {
-      mat.emissiveIntensity = 0.55 + 0.2 * Math.sin(this.time * 2);
+    for (const { c, rings, mat, rock, hover } of this.attractors || []) {
+      if (rock) {
+        rock.rotation.y = this.time * 0.25;
+        rock.rotation.x = this.time * 0.1;
+        rock.position.y = hover + (reduceMotion ? 0 : 0.04 * Math.sin(this.time * 1.3));
+      } else {
+        mat.emissiveIntensity = 0.55 + 0.2 * Math.sin(this.time * 2);
+      }
       for (const r of rings) {
         // Each ring shrinks from the edge of the pull in to the crystal,
         // brightening as it goes, then starts again.

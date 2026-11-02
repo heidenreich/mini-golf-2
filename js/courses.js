@@ -47,7 +47,7 @@ import { roundShape } from './terrain.js';
 //   attractors  gravity crystals { x, z, core, reach, pull }: a solid crystal
 //             of radius core that pulls the ball towards it, pull m/s² at
 //             its surface, weaker with the square of the distance, and
-//             nothing beyond reach
+//             nothing beyond reach; style: 'moon' draws a hovering moon rock
 //   railKick  rails that bounce the ball back harder (m/s added on a hit)
 //   pipes     warp pipes { from: [x, z], to: [x, z], dir }: roll in at
 //             `from`, pop out at `to` heading along dir (radians, 0 = +z)
@@ -427,7 +427,7 @@ export const COURSE = {
       theme: 'moon',
       gravity: 0.35,
       par: 3,
-      tip: 'Low gravity: the ball rolls and rolls. The ground leans to the right, so start it out left and let it curl back to the cup, up the side of a crater.',
+      tip: 'Low gravity: the ball rolls and rolls. The ground leans to the right, so start it out left and let it curl back to the cup, up the side of a crater. Stray too close to the little moon and you might go into orbit.',
       shape: ellipse(0, 6.5, 3.2, 7.6, 14),
       round: 1.2,
       tee: [0, 0],
@@ -446,6 +446,15 @@ export const COURSE = {
         // tee and the cup), so in low gravity a long putt curls slowly
         // back: start it out to the left and let it come round.
         { type: 'bank', x: 0, z1: 0.5, z2: 11, w: 3.4, tilt: 0.35 },
+      ],
+      // A little moon rock on the low side, where soft putts drift. Its
+      // pull is the same as anywhere, so in low gravity it dominates, and
+      // on its icy halo a ball that comes close can orbit it, lap after lap.
+      zones: [
+        { type: 'ice', x: -1.9, z: 8.4, w: 2.4, d: 2.4 },
+      ],
+      attractors: [
+        { x: -1.9, z: 8.4, core: 0.3, reach: 2.2, pull: 3, style: 'moon' },
       ],
     },
     {
