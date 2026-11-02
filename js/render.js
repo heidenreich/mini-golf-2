@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { insidePolygon, zoneContains, smooth } from './terrain.js';
-import { BALL_R, CUP_R, PIPE_R, WALL_HALF, spinnerAngle, moverState, windmillAngle, openBands, clipToBands, inBand, onBandEdge, skyBridges, skyBridgeMouths, fairwayBridges, deckCentre, deckSpan } from './physics.js';
+import { BALL_R, CUP_R, PIPE_R, WALL_HALF, spinnerAngle, moverState, windmillAngle, platformState, platformRails, openBands, clipToBands, inBand, onBandEdge, skyBridges, skyBridgeMouths, fairwayBridges, deckCentre, deckSpan } from './physics.js';
 import { THEMES, CRYSTAL_COLORS, rng, lambert, makeTree, makeDrift, skyTexture } from './themes.js';
 
 // Draws a hole and everything on it. Nothing in here affects the game:
@@ -337,6 +337,7 @@ export class World {
     this.buildCup(g, hole, terrain);
     this.buildObstacles(g, hole, terrain);
     this.buildGaps(g, hole, terrain);
+    this.buildPlatforms(g, hole, terrain);
     this.buildRopeBridges(g, hole, terrain);
     this.buildWindmills(g, hole, terrain);
     this.buildBumpers(g, hole, terrain);
@@ -1442,6 +1443,39 @@ export class World {
     });
   }
 
+  // Drifting clouds: a flat, soft white deck the ball rolls on, a billowy
+  // underside, and puffy cushions down the sides. Each is one group that
+  // moves with its platform every frame.
+  buildPlatforms(g, hole, terrain) {
+    const deckMat = lambert('#f7faff', { emissive: '#e8eff9', emissiveIntensity: 0.35 });
+    const puffMat = lambert('#ffffff', { flatShading: true, emissive: '#eef4fb', emissiveIntensity: 0.4 });
+    const flat = { height: () => 0 };
+    this.platforms = (hole.platforms || []).map((p, k) => {
+      const grp = new THREE.Group();
+      const rand = rng(41 + k);
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(p.w, 0.1, p.d), deckMat);
+      deck.position.y = -0.05;
+      deck.receiveShadow = true;
+      grp.add(deck);
+      // Billows underneath, biggest in the middle.
+      const n = Math.round(p.w * p.d * 2.2);
+      for (let i = 0; i < n; i++) {
+        const u = rand() - 0.5, v = rand() - 0.5;
+        const r = 0.35 + rand() * 0.3 + (0.5 - Math.hypot(u, v)) * 0.4;
+        const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), puffMat);
+        puff.scale.y = 0.6;
+        puff.position.set(u * (p.w - 0.3), -0.12 - r * 0.45 - rand() * 0.15, v * (p.d - 0.3));
+        puff.castShadow = true;
+        grp.add(puff);
+      }
+      // Cushions down the sides (the rails), in the group's own space.
+      const st0 = { x: 0, z: 0 };
+      this.buildCushions(grp, platformRails(p, st0), flat);
+      g.add(grp);
+      return { p, grp, base: terrain.height(p.x, p.z) };
+    });
+  }
+
   // A chasm right across the fairway, with a hazard stripe on each lip.
   buildGaps(g, hole, terrain) {
     const dark = lambert(this.theme.chasm.wall, { side: THREE.DoubleSide });
@@ -2103,6 +2137,10 @@ export class World {
     }
 
     for (const { s, grp } of this.spinners) grp.rotation.y = -spinnerAngle(s, t);
+    for (const { p, grp, base } of this.platforms || []) {
+      const st = platformState(p, t);
+      grp.position.set(st.x, base, st.z);
+    }
     for (const { c, rings, mat } of this.attractors || []) {
       mat.emissiveIntensity = 0.55 + 0.2 * Math.sin(this.time * 2);
       for (const r of rings) {

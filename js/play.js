@@ -14,8 +14,9 @@ const SETTLE_TIME = 0.3;        // a roll ends once the ball has been still this
 
 export function shoot(angle, power) {
   if (game.mode !== 'aim' || game.paused || game.sim.moving) return;
-  game.lastRest = [game.sim.ball.x, game.sim.ball.z];
-  game.undo = { x: game.sim.ball.x, z: game.sim.ball.z, strokes: game.strokes };
+  // Where it was played from (on a drifting cloud, where on the cloud).
+  game.lastRest = game.sim.spot();
+  game.undo = { spot: game.lastRest, strokes: game.strokes };
   game.sim.shoot(angle, power);
   game.strokes++;
   game.mode = 'rolling';
@@ -35,8 +36,8 @@ export function useMulligan() {
   if (!game.mulligans || !u || game.mode !== 'aim' || game.paused) return;
   game.mulligans = 0;
   game.undo = null;
-  game.sim.place(u.x, u.z);
-  game.lastRest = [u.x, u.z];
+  game.sim.place(...u.spot);
+  game.lastRest = u.spot;
   game.strokes = u.strokes;
   updateHud();
   saveRound();
@@ -51,7 +52,7 @@ export function pickUp() {
 // The ball is still again (after a putt, a splash or a knock).
 function ballReady() {
   game.mode = 'aim';
-  game.lastRest = [game.sim.ball.x, game.sim.ball.z];
+  game.lastRest = game.sim.spot();
   if (game.strokes >= MAX_STROKES) return pickUp();
   saveRound();
   if (game.strokes === MAX_STROKES - 1) toast('Last stroke before the ball is picked up');

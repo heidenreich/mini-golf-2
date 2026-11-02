@@ -69,7 +69,7 @@ let aimDirty = false; // the aim changed; redrawn once per frame, not per pointe
 // in step with moving obstacles (a few times a second is enough, and saves
 // phones a lot of work).
 export function refreshAim(tick) {
-  if (aimDirty || (tick && game.mode === 'aim' && game.aim.power > 0 && (game.sim.hole.spinners || game.sim.hole.movers))) {
+  if (aimDirty || (tick && game.mode === 'aim' && game.aim.power > 0 && (game.sim.hole.spinners || game.sim.hole.movers || game.sim.hole.platforms))) {
     aimDirty = false;
     showAim();
   }

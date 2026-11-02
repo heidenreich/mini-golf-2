@@ -20,7 +20,7 @@ Each hole sits on its own themed floating island: a wobbly outline with bays and
 | 2 | The Gap | 2 | Desert canyon | Up a kicker and over a chasm. Too soft and the ball drops in (+1 stroke) |
 | 2 | *or* Mushroom Grove | 3 | Mushroom grove | Giant mushrooms that bounce the ball about |
 | 3 | Dogleg Bowl | 3 | Autumn forest | A left-hand dogleg with a bowl in the corner that gathers the ball |
-| 3 | *or* Island Hopper | 3 | Tropical beach | Three islets with open sky between. Hop to the middle one, whose hollow catches the ball; too soft or too hard drops into the sky (+1 stroke) |
+| 3 | *or* Drifting Clouds | 4 | Tropical beach | Two clouds drift back and forth across the sky between two islands. Roll onto the first as it docks, ride it, hop to the second when they meet in the middle, then onto the green as it docks there. Miss and the ball drops into the sky (+1 stroke) |
 | 4 | Duck Pond | 3 | Lily pond | A pond in the middle (+1 stroke, ball returns), a bunker, bumpers behind the cup |
 | 4 | *or* Cherry Terraces | 3 | Cherry blossom | Climb two terraces; too soft rolls back down a level |
 | 5 | Windmill | 3 | Tulip fields | Through the door between the turning sails, or round either side |
