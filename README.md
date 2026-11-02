@@ -17,13 +17,13 @@ Each hole sits on its own themed floating island: a wobbly outline with bays and
 | Stage | Island | Par | Theme | What's on it |
 |---|---|---|---|---|
 | 1 | Welcome Hill | 2 | Spring meadow | A gentle hump down the middle |
-| 2 | The Gap | 2 | Desert canyon | Up a kicker and over a chasm. Too soft and the ball drops in (+1 stroke) |
+| 2 | The Gap | 3 | Desert canyon | Two jumps: up a kicker and over a chasm, along the canyon floor, then up a higher kicker and over a second chasm to the green. Too soft and the ball drops in (+1 stroke) |
 | 2 | *or* Mushroom Grove | 3 | Mushroom grove | Giant mushrooms that bounce the ball about |
 | 3 | Dogleg Bowl | 3 | Autumn forest | A left-hand dogleg with a bowl in the corner that gathers the ball |
-| 3 | *or* Drifting Clouds | 4 | Tropical beach | Two clouds drift back and forth across the sky between two islands. Roll onto the first as it docks, ride it, hop to the second when they meet in the middle, then onto the green as it docks there. Miss and the ball drops into the sky (+1 stroke) |
+| 3 | *or* Windmill | 3 | Tulip fields | Through the door between the turning sails, or round either side |
 | 4 | Duck Pond | 3 | Lily pond | A pond in the middle (+1 stroke, ball returns), a bunker, bumpers behind the cup |
 | 4 | *or* Cherry Terraces | 3 | Cherry blossom | Climb two terraces; too soft rolls back down a level |
-| 5 | Windmill | 3 | Tulip fields | Through the door between the turning sails, or round either side |
+| 5 | Drifting Clouds | 4 | Tropical beach | Two clouds drift back and forth across the sky between two islands. Roll onto the first as it docks, ride it, hop to the second when they meet in the middle, then onto the green as it docks there. Miss and the ball drops into the sky (+1 stroke) |
 | 5 | *or* Stepping Stones | 4 | Lily pond | Hop across zigzagging mossy stones with sky between, every hop on an angle |
 | 6 | Volcano | 3 | Volcanic island | The cup sits in a crater on a hill |
 | 6 | *or* Gravity Well | 3 | Crystal caves | A giant gravity crystal stands between the tee and the cup and pulls the ball towards it. Aim past it at the right pace and it slingshots you round to the cup |
