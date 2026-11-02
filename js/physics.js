@@ -69,6 +69,30 @@ function smoothstep(t) {
   return t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
 }
 
+// Where a drifting platform is at time t, and how fast it's moving: it
+// swings `amp` either side of (x, z) along `axis`, once every `period`.
+export function platformState(p, t) {
+  const w = (Math.PI * 2) / p.period;
+  const a = w * t + (p.phase || 0);
+  const off = p.amp * Math.sin(a), vel = p.amp * w * Math.cos(a);
+  return p.axis === 'x'
+    ? { x: p.x + off, z: p.z, vx: vel, vz: 0 }
+    : { x: p.x, z: p.z + off, vx: 0, vz: vel };
+}
+
+// Its outline as rail segments, open at both ends along `axis`: rails only
+// down its long sides.
+export function platformRails(p, st) {
+  const hw = p.w / 2, hd = p.d / 2;
+  return p.axis === 'x'
+    ? [[st.x - hw, st.z - hd, st.x + hw, st.z - hd], [st.x - hw, st.z + hd, st.x + hw, st.z + hd]]
+    : [[st.x - hw, st.z - hd, st.x - hw, st.z + hd], [st.x + hw, st.z - hd, st.x + hw, st.z + hd]];
+}
+
+// How far past a platform's open ends a ball still counts as on it, so a
+// ball rolling across where two clouds meet doesn't drop through the seam.
+const PLATFORM_SEAM = 0.08;
+
 export function moverState(m, t) {
   const w = (Math.PI * 2) / m.period;
   const a = w * t + (m.phase || 0);
@@ -237,6 +261,7 @@ export class Sim {
     this.t = 0;
     this.restTime = 0;
     this.air = null;    // the gap the ball is flying over, if any
+    this.onPlat = this.platformAt(this.ball.x, this.ball.z);   // the drifting platform it's on, or -1
     this.warps = 0;     // counts trips through a warp pipe (for sound and effects)
   }
 
@@ -247,8 +272,39 @@ export class Sim {
     return s;
   }
 
+  // The ball's velocity is relative to whatever it's on (the ground, or a
+  // drifting platform), so a ball riding a platform counts as still.
   get speed() {
     return Math.hypot(this.ball.vx, this.ball.vz);
+  }
+
+  // The drifting platform under (x, z), or -1.
+  platformAt(x, z) {
+    const ps = this.hole.platforms;
+    if (!ps) return -1;
+    for (let k = 0; k < ps.length; k++) {
+      const p = ps[k], st = platformState(p, this.t);
+      const ex = p.w / 2 + (p.axis === 'x' ? PLATFORM_SEAM : 0), ez = p.d / 2 + (p.axis === 'x' ? 0 : PLATFORM_SEAM);
+      if (Math.abs(x - st.x) <= ex && Math.abs(z - st.z) <= ez) return k;
+    }
+    return -1;
+  }
+
+  platformVel(k) {
+    if (k < 0) return [0, 0];
+    const st = platformState(this.hole.platforms[k], this.t);
+    return [st.vx, st.vz];
+  }
+
+  // Where the ball is, to put it back there later: [x, z], plus where it
+  // sits on a drifting platform, so it goes back onto the platform wherever
+  // that has drifted to.
+  spot() {
+    const { x, z } = this.ball;
+    const k = this.platformAt(x, z);
+    if (k < 0) return [x, z];
+    const st = platformState(this.hole.platforms[k], this.t);
+    return [x, z, { plat: k, dx: x - st.x, dz: z - st.z }];
   }
 
   // A ball held against a rail by a slope keeps creeping at a few mm/s;
@@ -257,10 +313,16 @@ export class Sim {
     return this.speed >= REST_SPEED;
   }
 
-  place(x, z) {
+  place(x, z, onPlatform) {
+    if (onPlatform && this.hole.platforms) {
+      const st = platformState(this.hole.platforms[onPlatform.plat], this.t);
+      x = st.x + onPlatform.dx;
+      z = st.z + onPlatform.dz;
+    }
     Object.assign(this.ball, { x, z, vx: 0, vz: 0 });
     this.restTime = 0;
     this.air = null;
+    this.onPlat = this.platformAt(x, z);
   }
 
   // A gap spans the whole hole between z1 and z2.
@@ -285,9 +347,25 @@ export class Sim {
     const dt = STEP;
     this.t += dt;
 
+    // Drifting platforms carry the ball. Its velocity is kept relative to
+    // what it's on, so stepping from one surface to another changes it by
+    // the difference between their velocities.
+    let pvx = 0, pvz = 0;
+    if (this.hole.platforms) {
+      const k = this.platformAt(b.x, b.z);
+      if (k !== (this.onPlat ?? -1)) {
+        const [ax0, az0] = this.platformVel(this.onPlat ?? -1), [ax1, az1] = this.platformVel(k);
+        b.vx += ax0 - ax1;
+        b.vz += az0 - az1;
+        this.onPlat = k;
+      }
+      [pvx, pvz] = this.platformVel(k);
+    }
+
     // Gaps: reach the edge fast enough and the ball flies across with
-    // nothing slowing it; too slow and it drops in.
-    const gap = this.gapAt(b.z);
+    // nothing slowing it; too slow and it drops in. A platform over a gap
+    // holds the ball up.
+    const gap = this.onPlat >= 0 ? null : this.gapAt(b.z);
     if (gap && !this.air) {
       if (Math.abs(b.vz) < (gap.minSpeed || GAP_MIN_SPEED)) return { type: 'fall' };
       this.air = { gap, from: b.vz > 0 ? gap.z1 : gap.z2, to: b.vz > 0 ? gap.z2 : gap.z1 };
@@ -336,10 +414,10 @@ export class Sim {
     }
 
     // Sub-step the movement so a fast ball can't slip through a rail.
-    const n = Math.max(1, Math.ceil((sp * dt) / (BALL_R * 0.4)));
+    const n = Math.max(1, Math.ceil(((sp + Math.hypot(pvx, pvz)) * dt) / (BALL_R * 0.4)));
     for (let i = 0; i < n; i++) {
-      b.x += (b.vx * dt) / n;
-      b.z += (b.vz * dt) / n;
+      b.x += ((b.vx + pvx) * dt) / n;
+      b.z += ((b.vz + pvz) * dt) / n;
       this.collide(onHit);
       const ev = this.checkCup(dt / n);
       if (ev) return ev;
@@ -428,6 +506,18 @@ export class Sim {
       Object.assign(seg, { x1: p.to[0], z1: p.to[1], x2: p.to[0], z2: p.to[1] });
       this.hitSegment(seg, PIPE_R, 0, 0, null, onHit);
     }
+    // The rails down a drifting platform's sides move with it. The ball's
+    // velocity is relative to what it's on, so the rails move relative to
+    // that.
+    (this.hole.platforms || []).forEach((p, k) => {
+      const st = platformState(p, t);
+      const [ox, oz] = this.platformVel(this.onPlat ?? -1);
+      for (const [x1, z1, x2, z2] of platformRails(p, st)) {
+        const seg = this.platSeg || (this.platSeg = {});
+        Object.assign(seg, { x1, z1, x2, z2 });
+        this.hitSegment(seg, WALL_HALF, st.vx - ox, st.vz - oz, null, onHit);
+      }
+    });
     // A gravity crystal is solid: the ball bounces off it like a post.
     for (const c of this.hole.attractors || []) {
       const seg = this.crystalSeg || (this.crystalSeg = {});

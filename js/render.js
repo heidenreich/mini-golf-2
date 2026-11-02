@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { insidePolygon, zoneContains, smooth } from './terrain.js';
-import { BALL_R, CUP_R, PIPE_R, WALL_HALF, spinnerAngle, moverState, windmillAngle, openBands, clipToBands, inBand, onBandEdge, skyBridges, skyBridgeMouths, fairwayBridges, deckCentre, deckSpan } from './physics.js';
+import { BALL_R, CUP_R, PIPE_R, WALL_HALF, spinnerAngle, moverState, windmillAngle, platformState, platformRails, openBands, clipToBands, inBand, onBandEdge, skyBridges, skyBridgeMouths, fairwayBridges, deckCentre, deckSpan } from './physics.js';
 import { THEMES, CRYSTAL_COLORS, rng, lambert, makeTree, makeDrift, skyTexture } from './themes.js';
 
 // Draws a hole and everything on it. Nothing in here affects the game:
@@ -337,6 +337,7 @@ export class World {
     this.buildCup(g, hole, terrain);
     this.buildObstacles(g, hole, terrain);
     this.buildGaps(g, hole, terrain);
+    this.buildPlatforms(g, hole, terrain);
     this.buildRopeBridges(g, hole, terrain);
     this.buildWindmills(g, hole, terrain);
     this.buildBumpers(g, hole, terrain);
@@ -1394,6 +1395,7 @@ export class World {
       const y = terrain.height(c.x, c.z);
       grp.position.set(c.x, y, c.z);
       const rand = rng(77 + ci);
+      if (c.style === 'moon') return this.buildMoonRock(g, c, y, rand);
       const glow = CRYSTAL_COLORS[ci % CRYSTAL_COLORS.length];
       const mat = new THREE.MeshStandardMaterial({ color: glow, emissive: glow, emissiveIntensity: 0.6, roughness: 0.15, flatShading: true });
       // One tall crystal in the middle, a ring of shorter ones leaning out.
@@ -1439,6 +1441,78 @@ export class World {
       block.userData.glow = '#5a40d0';
       g.add(block);
       return { m, block };
+    });
+  }
+
+  // A little moon for a gravity crystal with style: 'moon': a lumpy grey
+  // rock with craters, hovering just off the ground and slowly turning,
+  // with pale rings rippling in to show its pull.
+  buildMoonRock(g, c, y, rand) {
+    const geo = new THREE.IcosahedronGeometry(1, 2);
+    const pos = geo.attributes.position;
+    const v = new THREE.Vector3();
+    // Lumps, and a few craters pressed in.
+    const craters = Array.from({ length: 5 }, () => new THREE.Vector3(rand() - 0.5, rand() - 0.5, rand() - 0.5).normalize());
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).normalize();
+      let r = 1 + (rand() - 0.5) * 0.08;
+      for (const cr of craters) {
+        const d = v.distanceTo(cr);
+        if (d < 0.45) r -= 0.12 * Math.cos((d / 0.45) * (Math.PI / 2));
+      }
+      v.multiplyScalar(r);
+      pos.setXYZ(i, v.x, v.y, v.z);
+    }
+    geo.computeVertexNormals();
+    const rock = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: '#b9bcc4', roughness: 0.95, flatShading: true, emissive: '#9aa6c8', emissiveIntensity: 0.12 }));
+    const size = c.core * 1.15;
+    rock.scale.setScalar(size);
+    const hover = y + size + 0.12;
+    rock.position.set(c.x, hover, c.z);
+    rock.castShadow = true;
+    g.add(rock);
+    const rings = [];
+    for (let k = 0; k < 3; k++) {
+      const ringMat = new THREE.MeshBasicMaterial({ color: '#cfe0ff', transparent: true, opacity: 0, depthWrite: false });
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.96, 1, 64), ringMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(c.x, y + 0.03, c.z);
+      g.add(ring);
+      rings.push({ ring, mat: ringMat, phase: k / 3 });
+    }
+    return { c, rings, mat: rock.material, rock, hover };
+  }
+
+  // Drifting clouds: a flat, soft white deck the ball rolls on, a billowy
+  // underside, and puffy cushions down the sides. Each is one group that
+  // moves with its platform every frame.
+  buildPlatforms(g, hole, terrain) {
+    const deckMat = lambert('#f7faff', { emissive: '#e8eff9', emissiveIntensity: 0.35 });
+    const puffMat = lambert('#ffffff', { flatShading: true, emissive: '#eef4fb', emissiveIntensity: 0.4 });
+    const flat = { height: () => 0 };
+    this.platforms = (hole.platforms || []).map((p, k) => {
+      const grp = new THREE.Group();
+      const rand = rng(41 + k);
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(p.w, 0.1, p.d), deckMat);
+      deck.position.y = -0.05;
+      deck.receiveShadow = true;
+      grp.add(deck);
+      // Billows underneath, biggest in the middle.
+      const n = Math.round(p.w * p.d * 2.2);
+      for (let i = 0; i < n; i++) {
+        const u = rand() - 0.5, v = rand() - 0.5;
+        const r = 0.35 + rand() * 0.3 + (0.5 - Math.hypot(u, v)) * 0.4;
+        const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), puffMat);
+        puff.scale.y = 0.6;
+        puff.position.set(u * (p.w - 0.3), -0.12 - r * 0.45 - rand() * 0.15, v * (p.d - 0.3));
+        puff.castShadow = true;
+        grp.add(puff);
+      }
+      // Cushions down the sides (the rails), in the group's own space.
+      const st0 = { x: 0, z: 0 };
+      this.buildCushions(grp, platformRails(p, st0), flat);
+      g.add(grp);
+      return { p, grp, base: terrain.height(p.x, p.z) };
     });
   }
 
@@ -2038,8 +2112,32 @@ export class World {
     return Math.max(across / Math.tan(hfov / 2), along / Math.tan(vfov / 2) / 0.8);
   }
 
+  // The ace replay's camera: low down, just beyond and to one side of the
+  // cup, looking back along the putt and following the ball in.
+  startReplay(cx, cz, fx, fz) {
+    const l = Math.hypot(cx - fx, cz - fz) || 1;
+    const dx = (cx - fx) / l, dz = (cz - fz) / l;
+    const x = cx + dx * 1.7 - dz * 0.9, z = cz + dz * 1.7 + dx * 0.9;
+    const y = this.terrain.height(x, z) + 0.45;
+    this.replayView = { pos: new THREE.Vector3(x, y, z), look: new THREE.Vector3(fx, this.terrain.height(fx, fz), fz), cup: new THREE.Vector3(cx, this.terrain.cupLevel, cz) };
+    this.camera.position.copy(this.replayView.pos);
+    this.camera.lookAt(this.replayView.look);
+  }
+
+  endReplay() {
+    this.replayView = null;
+  }
+
   updateCamera(dt, focus) {
     if (this.cinematic) return this.updateCinematic(dt);
+    if (this.replayView) {
+      const r = this.replayView;
+      // Follow the ball, and settle on the cup as it arrives.
+      r.look.lerp(focus, 1 - Math.exp(-dt * 6));
+      this.camera.position.copy(r.pos);
+      this.camera.lookAt(r.look);
+      return;
+    }
     if (this.viewBridges) return this.updateBridgeView(dt);
     const c = this.cam, want = c.want;
     if (c.overview) {
@@ -2103,8 +2201,18 @@ export class World {
     }
 
     for (const { s, grp } of this.spinners) grp.rotation.y = -spinnerAngle(s, t);
-    for (const { c, rings, mat } of this.attractors || []) {
-      mat.emissiveIntensity = 0.55 + 0.2 * Math.sin(this.time * 2);
+    for (const { p, grp, base } of this.platforms || []) {
+      const st = platformState(p, t);
+      grp.position.set(st.x, base, st.z);
+    }
+    for (const { c, rings, mat, rock, hover } of this.attractors || []) {
+      if (rock) {
+        rock.rotation.y = this.time * 0.25;
+        rock.rotation.x = this.time * 0.1;
+        rock.position.y = hover + (reduceMotion ? 0 : 0.04 * Math.sin(this.time * 1.3));
+      } else {
+        mat.emissiveIntensity = 0.55 + 0.2 * Math.sin(this.time * 2);
+      }
       for (const r of rings) {
         // Each ring shrinks from the edge of the pull in to the crystal,
         // brightening as it goes, then starts again.

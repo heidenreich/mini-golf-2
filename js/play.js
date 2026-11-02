@@ -11,12 +11,82 @@ import { cancelDrag } from './input.js';
 import { finishHole } from './main.js';
 
 const SETTLE_TIME = 0.3;        // a roll ends once the ball has been still this long
+const REPLAY_SPEED = 0.75;      // an ace replays a little slower than it happened
+const REPLAY_MAX = 60 * 40;     // frames recorded per putt (a long roll is cut short)
+
+// The last putt, frame by frame ({ x, y, z, dt }), for the ace replay.
+const recording = [];
+// The replay while it runs: { t, length, onDone }.
+let replay = null;
+
+export function replaying() {
+  return !!replay;
+}
+
+// Plays the last putt again (after a hole-in-one), then calls onDone.
+// False if there's nothing worth replaying.
+export function startReplay(onDone) {
+  if (recording.length < 10) return false;
+  const length = recording.reduce((sum, f) => sum + f.dt, 0);
+  replay = { t: 0, length, onDone };
+  game.sink = null;
+  const [cx, cz] = holes[game.holeIndex].cup;
+  world.startReplay(cx, cz, recording[0].x, recording[0].z);
+  toast('Replay', 1400);
+  return true;
+}
+
+// Drops any replay without finishing it (leaving or restarting the hole).
+export function cancelReplay() {
+  replay = null;
+  recording.length = 0;
+  world.endReplay();
+}
+
+// Ends the replay at once (a tap skips it).
+export function skipReplay() {
+  if (!replay) return;
+  const done = replay.onDone;
+  replay = null;
+  world.endReplay();
+  done();
+}
+
+function replayFrame(dt) {
+  replay.t += dt * REPLAY_SPEED;
+  let t = replay.t, i = 0;
+  while (i < recording.length - 1 && t > recording[i + 1].dt) {
+    t -= recording[i + 1].dt;
+    i++;
+  }
+  const a = recording[i], b = recording[Math.min(i + 1, recording.length - 1)];
+  const f = b.dt > 0 ? Math.min(1, t / b.dt) : 1;
+  const x = a.x + (b.x - a.x) * f, y = a.y + (b.y - a.y) * f, z = a.z + (b.z - a.z) * f;
+  // The ball spins as it rolls, from how fast it's moving.
+  ballVel.x = b.dt > 0 ? ((b.x - a.x) / b.dt) * REPLAY_SPEED : 0;
+  ballVel.z = b.dt > 0 ? ((b.z - a.z) / b.dt) * REPLAY_SPEED : 0;
+  ballPos.set(x, y, z);
+  if (replay.t >= replay.length) {
+    // In it goes again: the cup, the sound and the confetti, then the card.
+    const done = replay.onDone;
+    replay = null;
+    game.sink = { x, z, t: 0 };
+    sfx.cup();
+    world.confetti(...holes[game.holeIndex].cup);
+    setTimeout(() => {
+      world.endReplay();
+      done();
+    }, 1100);
+  }
+}
 
 export function shoot(angle, power) {
   if (game.mode !== 'aim' || game.paused || game.sim.moving) return;
-  game.lastRest = [game.sim.ball.x, game.sim.ball.z];
-  game.undo = { x: game.sim.ball.x, z: game.sim.ball.z, strokes: game.strokes };
+  // Where it was played from (on a drifting cloud, where on the cloud).
+  game.lastRest = game.sim.spot();
+  game.undo = { spot: game.lastRest, strokes: game.strokes };
   game.sim.shoot(angle, power);
+  recording.length = 0;
   game.strokes++;
   game.mode = 'rolling';
   game.aim.power = 0;
@@ -35,8 +105,8 @@ export function useMulligan() {
   if (!game.mulligans || !u || game.mode !== 'aim' || game.paused) return;
   game.mulligans = 0;
   game.undo = null;
-  game.sim.place(u.x, u.z);
-  game.lastRest = [u.x, u.z];
+  game.sim.place(...u.spot);
+  game.lastRest = u.spot;
   game.strokes = u.strokes;
   updateHud();
   saveRound();
@@ -51,7 +121,7 @@ export function pickUp() {
 // The ball is still again (after a putt, a splash or a knock).
 function ballReady() {
   game.mode = 'aim';
-  game.lastRest = [game.sim.ball.x, game.sim.ball.z];
+  game.lastRest = game.sim.spot();
   if (game.strokes >= MAX_STROKES) return pickUp();
   saveRound();
   if (game.strokes === MAX_STROKES - 1) toast('Last stroke before the ball is picked up');
@@ -172,6 +242,7 @@ export const ballPos = new Vector3();
 let frostTimer = 0, hissCount = 0;
 export const ballVel = { x: 0, z: 0 };
 export function placeBall(dt) {
+  if (replay) return replayFrame(dt);
   const sim = game.sim, b = sim.ball, terrain = game.terrain;
   ballVel.x = b.vx;
   ballVel.z = b.vz;
@@ -217,4 +288,7 @@ export function placeBall(dt) {
     lift = 4 * 0.35 * f * (1 - f);
   }
   ballPos.set(b.x, terrain.height(b.x, b.z) + BALL_R + lift, b.z);
+  if (game.mode === 'rolling' && dt > 0 && recording.length < REPLAY_MAX) {
+    recording.push({ x: ballPos.x, y: ballPos.y, z: ballPos.z, dt: recording.length ? dt : 0 });
+  }
 }

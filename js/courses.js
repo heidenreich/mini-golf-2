@@ -30,6 +30,10 @@ import { roundShape } from './terrain.js';
 //             inner leaves a clear circle of that radius round the pivot,
 //             so the bar is two arms (and can sweep round a cup)
 //   movers    blocks { x1, z1, x2, z2, w, d, period, phase } gliding between two points
+//   platforms drifting clouds { x, z, w, d, axis, amp, period, phase }: a
+//             w × d platform swinging amp either side of (x, z) along axis,
+//             open at both ends that way, with rails down its sides. It
+//             carries the ball, and holds it up over a gap
 //   gaps      chasms right across the hole { z1, z2 }: reach the edge fast
 //             enough and the ball flies over, too slow and it drops in (+1 stroke).
 //             split: true opens the island right through, with sky below;
@@ -47,7 +51,7 @@ import { roundShape } from './terrain.js';
 //   attractors  gravity crystals { x, z, core, reach, pull }: a solid crystal
 //             of radius core that pulls the ball towards it, pull m/s² at
 //             its surface, weaker with the square of the distance, and
-//             nothing beyond reach
+//             nothing beyond reach; style: 'moon' draws a hovering moon rock
 //   railKick  rails that bounce the ball back harder (m/s added on a hit)
 //   pipes     warp pipes { from: [x, z], to: [x, z], dir }: roll in at
 //             `from`, pop out at `to` heading along dir (radians, 0 = +z)
@@ -342,28 +346,24 @@ export const COURSE = {
     // Added after the bonus island so earlier holes keep their numbers
     // (a saved round remembers holes by number).
     {
-      name: 'Island Hopper',
+      name: 'Drifting Clouds',
       theme: 'beach',
-      par: 3,
-      tip: 'Hop over to the middle island: the sand at its far end stops the ball. Too soft or too hard and it drops into the sky.',
-      shape: [[-1.6, -1], [1.6, -1], [1.8, 2], [1.6, 4.2], [1.6, 5.6], [2.0, 6.6], [2.0, 7.8], [1.6, 8.8], [1.6, 10.2], [1.9, 12], [1.6, 14], [-1.6, 14], [-1.9, 12], [-1.6, 10.2], [-1.6, 8.8], [-2.0, 7.8], [-2.0, 6.6], [-1.6, 5.6], [-1.6, 4.2], [-1.8, 2]],
-      round: 0.5,
-      tee: [0, 0],
-      cup: [0.3, 12.4],
-      // The middle island's hollow and sand catch a wide range of putts (only
-      // near full power carries on into the second gap), and the lips either
-      // side of that gap stop a slow ball dribbling in.
-      ground: [
-        { type: 'hill', x: 0, z: 7.0, r: 1.3, h: -0.2 },
-        { type: 'ridge', axis: 'z', at: 8.8, w: 1.2, h: 0.15 },
-        { type: 'ridge', axis: 'z', at: 10.2, w: 1.0, h: 0.12 },
-      ],
-      zones: [
-        { type: 'sand', x: 0, z: 8.15, w: 4.2, d: 1.2, rect: true },
-      ],
+      par: 4,
+      tip: 'Two clouds drift across the sky between the islands. Roll onto one when it docks, ride it, hop to the other when they meet, then on to the green. Miss and it drops into the sky.',
+      // Two islands with open sky between, and two clouds drifting back and
+      // forth in the gap in opposite directions: as the first docks against
+      // the tee island the second docks against the green, and halfway
+      // between they meet in the middle.
+      shape: [[-1.8, -1], [1.8, -1], [1.8, 15], [-1.8, 15]],
+      round: 0.6,
+      tee: [0, 1.6],
+      cup: [0.3, 13.0],
       gaps: [
-        { z1: 4.2, z2: 5.6, split: true },
-        { z1: 8.8, z2: 10.2, split: true },
+        { z1: 3, z2: 11, split: true, minSpeed: 99 },
+      ],
+      platforms: [
+        { x: 0, z: 5, w: 2.4, d: 2.4, axis: 'z', amp: 1.1, period: 8, phase: -Math.PI / 2 },
+        { x: 0, z: 9, w: 2.4, d: 2.4, axis: 'z', amp: 1.1, period: 8, phase: Math.PI / 2 },
       ],
     },
     {
@@ -427,7 +427,7 @@ export const COURSE = {
       theme: 'moon',
       gravity: 0.35,
       par: 3,
-      tip: 'Low gravity: the ball rolls and rolls. The ground leans to the right, so start it out left and let it curl back to the cup, up the side of a crater.',
+      tip: 'Low gravity: the ball rolls and rolls. The ground leans to the right, so start it out left and let it curl back to the cup, up the side of a crater. Stray too close to the little moon and you might go into orbit.',
       shape: ellipse(0, 6.5, 3.2, 7.6, 14),
       round: 1.2,
       tee: [0, 0],
@@ -446,6 +446,15 @@ export const COURSE = {
         // tee and the cup), so in low gravity a long putt curls slowly
         // back: start it out to the left and let it come round.
         { type: 'bank', x: 0, z1: 0.5, z2: 11, w: 3.4, tilt: 0.35 },
+      ],
+      // A little moon rock on the low side, where soft putts drift. Its
+      // pull is the same as anywhere, so in low gravity it dominates, and
+      // on its icy halo a ball that comes close can orbit it, lap after lap.
+      zones: [
+        { type: 'ice', x: -1.9, z: 8.4, w: 2.4, d: 2.4 },
+      ],
+      attractors: [
+        { x: -1.9, z: 8.4, core: 0.3, reach: 2.2, pull: 3, style: 'moon' },
       ],
     },
     {
@@ -488,7 +497,7 @@ export const MAP = {
   stages: [
     ['Welcome Hill'],
     ['The Gap', 'Mushroom Grove'],
-    ['Dogleg Bowl', 'Island Hopper'],
+    ['Dogleg Bowl', 'Drifting Clouds'],
     ['Duck Pond', 'Cherry Terraces'],
     ['Windmill', 'Stepping Stones'],
     ['Volcano', 'Gravity Well'],

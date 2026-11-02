@@ -20,7 +20,7 @@ Each hole sits on its own themed floating island: a wobbly outline with bays and
 | 2 | The Gap | 2 | Desert canyon | Up a kicker and over a chasm. Too soft and the ball drops in (+1 stroke) |
 | 2 | *or* Mushroom Grove | 3 | Mushroom grove | Giant mushrooms that bounce the ball about |
 | 3 | Dogleg Bowl | 3 | Autumn forest | A left-hand dogleg with a bowl in the corner that gathers the ball |
-| 3 | *or* Island Hopper | 3 | Tropical beach | Three islets with open sky between. Hop to the middle one, whose hollow catches the ball; too soft or too hard drops into the sky (+1 stroke) |
+| 3 | *or* Drifting Clouds | 4 | Tropical beach | Two clouds drift back and forth across the sky between two islands. Roll onto the first as it docks, ride it, hop to the second when they meet in the middle, then onto the green as it docks there. Miss and the ball drops into the sky (+1 stroke) |
 | 4 | Duck Pond | 3 | Lily pond | A pond in the middle (+1 stroke, ball returns), a bunker, bumpers behind the cup |
 | 4 | *or* Cherry Terraces | 3 | Cherry blossom | Climb two terraces; too soft rolls back down a level |
 | 5 | Windmill | 3 | Tulip fields | Through the door between the turning sails, or round either side |
@@ -28,12 +28,14 @@ Each hole sits on its own themed floating island: a wobbly outline with bays and
 | 6 | Volcano | 3 | Volcanic island | The cup sits in a crater on a hill |
 | 6 | *or* Gravity Well | 3 | Crystal caves | A giant gravity crystal stands between the tee and the cup and pulls the ball towards it. Aim past it at the right pace and it slingshots you round to the cup |
 | 7 | Switchback | 3 | Tropical beach | Downhill round two corners: the first banked to carry you round, the second leaning the wrong way, out towards a bunker. Then over a ridge |
-| 7 | *or* Moon Hop | 3 | The Moon | Low gravity: the ball rolls on and on, across craters to a cup up a crater's side. The fairway leans over, so a long putt curls slowly round |
+| 7 | *or* Moon Hop | 3 | The Moon | Low gravity: the ball rolls on and on, across craters to a cup up a crater's side. The fairway leans over, so a long putt curls slowly round. A little moon hovers on the low side over an icy halo: drift too close and the ball can go into orbit round it |
 | 8 | Frozen Island | 3 | Winter | The whole fairway is frozen; ponds either side of an ice bridge |
 | 8 | *or* Rope Bridge | 3 | Cherry blossom | Putt along a sagging plank bridge with no rails; roll off the side and it falls (+1 stroke) |
 | 9 | Warp Finale | 3 | Night | Sliding blocks, or a warp pipe up the ramp |
 | 9 | *or* Tightrope | 3 | Volcanic island | A long U: steeply uphill to a flat top, round, and steeply down to the cup. Or take the shortcut along a plank barely wider than the ball that curves and leans across the sky; fall off and it costs a stroke |
 | ★ | Cloud Island (bonus) | 2 | Cloud | A cloud in a U with open sky between its arms. Ride the rainbow straight across to the cup (it arches, curves and leans, so aim out and let it bring you round), or play safe the long way round the cloud (a 3, so no mulligan). Reached by a golden bridge after a hole-in-one on any island before the last. Par or better wins a **mulligan**: later in the round, tap the golden ball (or press M) after a putt to take it again, with that putt and any penalty it cost not counting. The score here only counts if it's a hole-in-one, so the bonus island never costs you |
+
+**Ace replay.** After a hole-in-one the putt plays again in slow motion, from low down beside the cup as the ball rolls in, before the scorecard. Tap (or press Space) to skip it.
 
 **The golden bridge.** Every island but the last has a golden bridge with a padlock on it. Make a hole-in-one and it opens to Cloud Island, a bonus hole played before you carry on, where par or better wins a mulligan. You can visit it once a round.
 

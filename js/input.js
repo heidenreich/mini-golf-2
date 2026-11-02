@@ -2,7 +2,7 @@
 import { $, canvas, game, world, holes } from './state.js';
 import { powerColor } from './render.js';
 import { ac } from './audio.js';
-import { shoot, useMulligan } from './play.js';
+import { shoot, useMulligan, replaying, skipReplay } from './play.js';
 import { showMenu, resumeGame, restartHole } from './main.js';
 
 const CANCEL_PULL = 16;         // px: let go inside this and the putt is cancelled
@@ -69,7 +69,7 @@ let aimDirty = false; // the aim changed; redrawn once per frame, not per pointe
 // in step with moving obstacles (a few times a second is enough, and saves
 // phones a lot of work).
 export function refreshAim(tick) {
-  if (aimDirty || (tick && game.mode === 'aim' && game.aim.power > 0 && (game.sim.hole.spinners || game.sim.hole.movers))) {
+  if (aimDirty || (tick && game.mode === 'aim' && game.aim.power > 0 && (game.sim.hole.spinners || game.sim.hole.movers || game.sim.hole.platforms))) {
     aimDirty = false;
     showAim();
   }
@@ -122,6 +122,11 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 canvas.addEventListener('pointerdown', e => {
   ac();
+  // A tap skips an ace replay.
+  if (replaying()) {
+    skipReplay();
+    return;
+  }
   try {
     canvas.setPointerCapture(e.pointerId);
   } catch {
@@ -258,6 +263,11 @@ const keys = new Set();
 window.addEventListener('keydown', e => {
   if ($('overlay').classList.contains('show')) {
     if (e.key === 'Escape' && game.paused) resumeGame();
+    return;
+  }
+  if (replaying() && (e.key === ' ' || e.key === 'Enter' || e.key === 'Escape')) {
+    e.preventDefault();
+    skipReplay();
     return;
   }
   // Let Space and Enter press a focused on-screen button.
