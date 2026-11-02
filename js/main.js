@@ -9,7 +9,7 @@ import { load, save, saveRound, savedRound, clearRound } from './storage.js';
 import { ac, sfx, soundIsOn, setSound } from './audio.js';
 import { toast, relName, scoreWord, updateHud, scorecardHtml, fade, bestText, showCard, hideCard, setPlaying, updateMulligan } from './ui.js';
 import { mapSvg } from './map.js';
-import { shoot, pickUp, physicsStep, ballPos, ballVel, placeBall } from './play.js';
+import { shoot, pickUp, physicsStep, ballPos, ballVel, placeBall, startReplay, cancelReplay } from './play.js';
 import { cancelDrag, updateGrabRing, handleKeys, refreshAim } from './input.js';
 
 // If the phone drops the 3D view (it can under memory pressure), say so and
@@ -248,6 +248,7 @@ function startRound() {
 }
 
 function startHole(i, { quiet = false, keepStrokes = false } = {}) {
+  cancelReplay();
   game.holeIndex = i;
   const hole = holes[i];
   game.terrain = makeTerrain(hole);
@@ -316,7 +317,7 @@ export function finishHole(score, note = '', { resumed = false } = {}) {
     : only != null
       ? `<button class="btn primary" data-go="${only}">Next hole: ${holes[only].name}</button>`
       : '<button class="btn primary" data-act="paths">Choose your path</button>';
-  setTimeout(() => {
+  const showDone = () => {
     if (game.mode !== 'done') return;
     game.doneCard = `
       <h2>${note || scoreWord(score, hole.par)}</h2>
@@ -325,7 +326,15 @@ export function finishHole(score, note = '', { resumed = false } = {}) {
       ${scorecardHtml()}
       <div class="buttons">${nextButton}<button class="btn" data-act="menu">Menu</button></div>`;
     if (!game.paused) showCard(game.doneCard);
-  }, resumed ? 0 : score === 1 ? 1600 : 1000);
+  };
+  // A hole-in-one replays (once the ball has dropped in), then the card.
+  if (!resumed && score === 1) {
+    setTimeout(() => {
+      if (game.mode !== 'done' || !startReplay(showDone)) showDone();
+    }, 1300);
+  } else {
+    setTimeout(showDone, resumed ? 0 : 1000);
+  }
 }
 
 function showFinal() {

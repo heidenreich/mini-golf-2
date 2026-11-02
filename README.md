@@ -35,6 +35,8 @@ Each hole sits on its own themed floating island: a wobbly outline with bays and
 | 9 | *or* Tightrope | 3 | Volcanic island | A long U: steeply uphill to a flat top, round, and steeply down to the cup. Or take the shortcut along a plank barely wider than the ball that curves and leans across the sky; fall off and it costs a stroke |
 | ★ | Cloud Island (bonus) | 2 | Cloud | A cloud in a U with open sky between its arms. Ride the rainbow straight across to the cup (it arches, curves and leans, so aim out and let it bring you round), or play safe the long way round the cloud (a 3, so no mulligan). Reached by a golden bridge after a hole-in-one on any island before the last. Par or better wins a **mulligan**: later in the round, tap the golden ball (or press M) after a putt to take it again, with that putt and any penalty it cost not counting. The score here only counts if it's a hole-in-one, so the bonus island never costs you |
 
+**Ace replay.** After a hole-in-one the putt plays again in slow motion, from low down beside the cup as the ball rolls in, before the scorecard. Tap (or press Space) to skip it.
+
 **The golden bridge.** Every island but the last has a golden bridge with a padlock on it. Make a hole-in-one and it opens to Cloud Island, a bonus hole played before you carry on, where par or better wins a mulligan. You can visit it once a round.
 
 Scores are measured against par for the route you took; your best round (to par) is saved in your browser.

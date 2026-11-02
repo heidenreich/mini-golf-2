@@ -2078,8 +2078,32 @@ export class World {
     return Math.max(across / Math.tan(hfov / 2), along / Math.tan(vfov / 2) / 0.8);
   }
 
+  // The ace replay's camera: low down, just beyond and to one side of the
+  // cup, looking back along the putt and following the ball in.
+  startReplay(cx, cz, fx, fz) {
+    const l = Math.hypot(cx - fx, cz - fz) || 1;
+    const dx = (cx - fx) / l, dz = (cz - fz) / l;
+    const x = cx + dx * 1.7 - dz * 0.9, z = cz + dz * 1.7 + dx * 0.9;
+    const y = this.terrain.height(x, z) + 0.45;
+    this.replayView = { pos: new THREE.Vector3(x, y, z), look: new THREE.Vector3(fx, this.terrain.height(fx, fz), fz), cup: new THREE.Vector3(cx, this.terrain.cupLevel, cz) };
+    this.camera.position.copy(this.replayView.pos);
+    this.camera.lookAt(this.replayView.look);
+  }
+
+  endReplay() {
+    this.replayView = null;
+  }
+
   updateCamera(dt, focus) {
     if (this.cinematic) return this.updateCinematic(dt);
+    if (this.replayView) {
+      const r = this.replayView;
+      // Follow the ball, and settle on the cup as it arrives.
+      r.look.lerp(focus, 1 - Math.exp(-dt * 6));
+      this.camera.position.copy(r.pos);
+      this.camera.lookAt(r.look);
+      return;
+    }
     if (this.viewBridges) return this.updateBridgeView(dt);
     const c = this.cam, want = c.want;
     if (c.overview) {
