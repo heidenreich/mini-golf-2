@@ -32,6 +32,30 @@ function featureHeight(f, x, z) {
       const fade = 1 - smooth((Math.abs(d) - f.w) / 0.6);
       return f.tilt * d * Math.sin((Math.PI * (z - f.z1)) / (f.z2 - f.z1)) * fade;
     }
+    case 'horseshoe': {
+      // Downhill all the way round a U: two arms along x (centred on
+      // z = cz - R and cz + R, half-width w) from x = xs to a semicircular
+      // bend centred on (cx, cz). The ground falls `drop` evenly along the
+      // middle of the U from the end of the first arm to the end of the
+      // second. Between the arms it blends smoothly from one to the other,
+      // so anything crossing the gap runs downhill too, with no seams.
+      const La = f.cx - f.xs, L = 2 * La + Math.PI * f.R;
+      const at = s => (-f.drop * s) / L;
+      const hA = px => at(px - f.xs), hB = px => at(La + Math.PI * f.R + f.cx - px);
+      const dz = z - f.cz, inner = f.R - f.w;
+      let along, rEff;
+      if (x < f.cx) {
+        along = dz < 0 ? hA(x) : hB(x);
+        rEff = Math.abs(dz);
+      } else {
+        along = at(La + f.R * (Math.atan2(dz, x - f.cx) + Math.PI / 2));
+        rEff = Math.hypot(x - f.cx, dz);
+      }
+      if (rEff >= inner) return along;
+      const px = Math.min(x, f.cx);
+      const across = hA(px) + (hB(px) - hA(px)) * smooth((dz + inner) / (2 * inner));
+      return across + (along - across) * smooth(rEff / inner);
+    }
     case 'corner': {
       // A banked turn: rising away from the inside corner (x, z) towards
       // the outside one (the way dir [sx, sz] points), from r0 out to r1,

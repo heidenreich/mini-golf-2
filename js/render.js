@@ -1497,6 +1497,10 @@ export class World {
       g.add(m);
     };
     for (const br of hole.ropeBridges || []) {
+      if (br.rainbow) {
+        this.buildRainbow(g, br, terrain);
+        continue;
+      }
       const len = br.z2 - br.z1;
       const n = Math.round(len / 0.2);
       const sky = br.x1 != null;
@@ -1559,6 +1563,47 @@ export class World {
         }
       }
     }
+  }
+
+  // A rainbow across the sky (a sky bridge with rainbow: true): a smooth
+  // ribbon of seven bands on exactly the deck the ball rolls on, following
+  // its curve, bank and arch, with a paler underside. No ropes or posts.
+  buildRainbow(g, br, terrain) {
+    const BANDS = ['#ff595e', '#ff924c', '#ffca3a', '#8ac926', '#1982c4', '#4267ac', '#6a4c93'];
+    const half = (br.x2 - br.x1) / 2;
+    const steps = Math.max(8, Math.round((br.z2 - br.z1) / 0.08));
+    const col = new THREE.Color();
+    const top = [], topCol = [], under = [];
+    const at = (t, s) => {
+      const z = br.z1 + (br.z2 - br.z1) * t;
+      const x = deckCentre(br, z) + (s * 2 - 1) * half;
+      return [x, terrain.height(x, z), z];
+    };
+    for (let i = 0; i < steps; i++) {
+      const t0 = i / steps, t1 = (i + 1) / steps;
+      for (let j = 0; j < BANDS.length; j++) {
+        const s0 = j / BANDS.length, s1 = (j + 1) / BANDS.length;
+        const a = at(t0, s0), b = at(t0, s1), c = at(t1, s0), d = at(t1, s1);
+        top.push(...a, ...c, ...b, ...b, ...c, ...d);
+        col.set(BANDS[j]);
+        for (let k = 0; k < 6; k++) topCol.push(col.r, col.g, col.b);
+        for (const p of [a, b, c, d]) p[1] -= 0.06;
+        under.push(...a, ...b, ...c, ...b, ...d, ...c);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(top, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(topCol, 3));
+    geo.computeVertexNormals();
+    const ribbon = new THREE.Mesh(geo, lambert('#ffffff', { vertexColors: true, emissive: '#ffffff', emissiveIntensity: 0.15 }));
+    ribbon.receiveShadow = true;
+    g.add(ribbon);
+    const ugeo = new THREE.BufferGeometry();
+    ugeo.setAttribute('position', new THREE.Float32BufferAttribute(under, 3));
+    ugeo.computeVertexNormals();
+    const underside = new THREE.Mesh(ugeo, lambert('#f4ecff', { emissive: '#ffffff', emissiveIntensity: 0.2 }));
+    underside.castShadow = true;
+    g.add(underside);
   }
 
   // A little Dutch windmill: walls with a tunnel through, a roof, and four
