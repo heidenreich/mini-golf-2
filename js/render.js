@@ -1792,9 +1792,13 @@ export class World {
 
   // Green warp pipes: a mouth in the ground and a stub the ball pops out of.
   buildPipes(g, hole, terrain) {
-    const green = lambert('#2fb34a');
     const inside = lambert('#14301b', { side: THREE.BackSide });
     for (const p of hole.pipes || []) {
+      // Green unless the pipe says otherwise; its mouth and the far end
+      // glow the same colour, so you can tell which goes where.
+      const color = p.color || '#2fb34a';
+      const green = lambert(color);
+      const glow = p.color || '#1fbf4a';
       const [fx, fz] = p.from, [tx, tz] = p.to;
       const yf = terrain.height(fx, fz), yt = terrain.height(tx, tz);
       const liner = new THREE.Mesh(new THREE.CylinderGeometry(PIPE_R, PIPE_R, 0.5, 28, 1, true), inside);
@@ -1805,7 +1809,7 @@ export class World {
       const bottom = new THREE.Mesh(new THREE.CircleGeometry(PIPE_R, 28), lambert('#0b1a0f'));
       bottom.rotation.x = -Math.PI / 2;
       bottom.position.set(fx, yf - 0.48, fz);
-      rim.userData.glow = '#1fbf4a';
+      rim.userData.glow = glow;
       g.add(liner, rim, bottom);
 
       const stub = new THREE.Mesh(new THREE.CylinderGeometry(PIPE_R, PIPE_R, 0.28, 28), green);
@@ -1817,7 +1821,7 @@ export class World {
       const top = new THREE.Mesh(new THREE.CircleGeometry(PIPE_R - 0.02, 28), lambert('#0b1a0f'));
       top.rotation.x = -Math.PI / 2;
       top.position.set(tx, yt + 0.285, tz);
-      stub.userData.glow = lip.userData.glow = '#1fbf4a';
+      stub.userData.glow = lip.userData.glow = glow;
       g.add(stub, lip, top);
     }
   }

@@ -53,8 +53,11 @@ import { roundShape } from './terrain.js';
 //             its surface, weaker with the square of the distance, and
 //             nothing beyond reach; style: 'moon' draws a hovering moon rock
 //   railKick  rails that bounce the ball back harder (m/s added on a hit)
-//   pipes     warp pipes { from: [x, z], to: [x, z], dir }: roll in at
-//             `from`, pop out at `to` heading along dir (radians, 0 = +z)
+//   pipes     warp pipes { from: [x, z], to: [x, z], dir, color }: roll in at
+//             `from`, pop out at `to` heading along dir (radians, 0 = +z);
+//             color tints the mouth and the far end (green by default);
+//             it comes out as fast as it went in, a little less, but at
+//             least minOut (m/s, default PIPE_MIN_OUT)
 //   tip       shown when the hole starts
 //   surface   the fairway's surface where no zone says otherwise (default grass)
 //   gravity   a fraction of normal gravity (the Moon): weaker slopes, and the
@@ -256,24 +259,39 @@ export const COURSE = {
       name: 'Warp Finale',
       theme: 'night',
       par: 3,
-      tip: 'Slip past the sliding blocks, or find the warp pipe on the right.',
-      shape: [[-2, -1], [2, -1], [2, 10.8], [2.6, 14], [1.8, 18], [-1.8, 18], [-2.6, 14], [-2, 10.8]],
-      round: 1.0,
+      tip: 'The cup is up on the top terrace, out of reach. Four warp pipes, four places: each comes out where its colour glows. Find the right one, and mind your pace.',
+      // Three terraces, each a step up behind a wall, so you can't roll
+      // from one to the next. On the bottom one, four warp pipes: gold
+      // comes out on the top terrace, blue on the middle ledge, green in
+      // the bunker at the back, and red straight back down by the tee.
+      // From the middle ledge a purple pipe in the corner also reaches the
+      // top. Gold and purple come out heading up the terrace, not at the
+      // cup, as fast as the ball went in (a little less), so the pace
+      // decides how close it ends up.
+      shape: [[-3, -1], [3, -1], [3, 16.5], [-3, 16.5]],
+      round: 0.8,
       tee: [0, 0],
-      cup: [0, 16],
+      cup: [0, 14.0],
+      route: [[0, 4.2]],
       ground: [
-        { type: 'ramp', axis: 'z', from: 11, to: 13, rise: 0.55 },
-        { type: 'hill', x: 0, z: 16, r: 1.7, h: -0.22 },
+        { type: 'ramp', axis: 'z', from: 5.9, to: 6.3, rise: 0.4 },
+        { type: 'ramp', axis: 'z', from: 10.9, to: 11.3, rise: 0.4 },
       ],
-      movers: [
-        { x1: -1.0, z1: 5, x2: 1.0, z2: 5, w: 1.1, d: 0.5, period: 3.2, phase: 0 },
-        { x1: 1.0, z1: 8.8, x2: -1.0, z2: 8.8, w: 1.1, d: 0.5, period: 2.6, phase: 1.3 },
+      walls: [
+        [-3, 6.0, 3, 6.0],
+        [-3, 11.0, 3, 11.0],
+        // The purple pipe's corner pocket on the middle ledge.
+        [1.0, 8.9, 3, 8.9],
       ],
       pipes: [
-        { from: [-1.45, 3.2], to: [1.45, 10.2], dir: 0 },
+        { from: [2.2, 4.2], to: [2.2, 0.6], dir: 3.142, minOut: 3, color: '#ff4d5e' },
+        { from: [0.75, 4.2], to: [-1.9, 14.6], dir: 0, minOut: 1.2, color: '#4dff88' },
+        { from: [-0.75, 4.2], to: [1.5, 11.7], dir: 0, minOut: 1.2, color: '#ffc94d' },
+        { from: [-2.2, 4.2], to: [-1.8, 7.0], dir: 0, minOut: 1.2, color: '#4da3ff' },
+        { from: [2.2, 10.0], to: [-0.9, 11.7], dir: 0, minOut: 1.2, color: '#b26bff' },
       ],
       zones: [
-        { type: 'sand', x: -1.3, z: 12, w: 1.2, d: 1.4 },
+        { type: 'sand', x: -1.9, z: 15.4, w: 1.8, d: 1.4, rect: true },
       ],
     },
     {
