@@ -477,7 +477,8 @@ export class Sim {
       const sp = Math.hypot(b.vx, b.vz);
       if (sp > PIPE_MAX_SPEED) continue;
       const ux = Math.sin(p.dir), uz = Math.cos(p.dir);
-      const out = Math.max(PIPE_MIN_OUT, sp * 0.85);
+      // As fast as it went in (a little less), but at least minOut.
+      const out = Math.max(p.minOut ?? PIPE_MIN_OUT, sp * 0.85);
       // Out beside the far pipe's stub, which is solid.
       b.x = p.to[0] + ux * (PIPE_R + BALL_R + 0.03);
       b.z = p.to[1] + uz * (PIPE_R + BALL_R + 0.03);
